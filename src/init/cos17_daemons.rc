@@ -1,0 +1,65 @@
+# Rootless permanent init definitions for zero-loop oneshot memkiller_ctl, xtouch_tune (DT2W),
+# crash-looping vendor.qvirtservice_rs stop, and one-shot fresh-boot OplusCamera default-OFF.
+service vendor.cos17_memkiller /vendor/bin/cos17_memkiller_ctl
+    class late_start
+    user root
+    group root system readproc
+    seclabel u:r:cos17_memkiller:s0
+    oneshot
+    disabled
+
+service vendor.xtouch_tune /vendor/bin/xtouch_tune --daemon
+    class late_start
+    user root
+    group root system graphics
+    seclabel u:r:vendor_xtouch_tune:s0
+    disabled
+
+service vendor.cos17_opluscam_init /system/bin/sh -c "/system/bin/cmd package disable-user --user 0 com.oplus.camera"
+    class late_start
+    user root
+    group root system
+    seclabel u:r:cos17_memkiller:s0
+    oneshot
+    disabled
+
+on post-fs
+    stop vendor.qvirtservice_rs
+
+on property:init.svc.vendor.qvirtservice_rs=running
+    stop vendor.qvirtservice_rs
+
+on property:init.svc.vendor.qvirtservice_rs=restarting
+    stop vendor.qvirtservice_rs
+
+on property:sys.boot_completed=1
+    stop vendor.qvirtservice_rs
+    start vendor.xtouch_tune
+    start vendor.cos17_memkiller
+
+on property:sys.boot_completed=1 && property:persist.sys.cos17.opluscam_init_done=
+    start vendor.cos17_opluscam_init
+    setprop persist.sys.cos17.opluscam_init_done 1
+
+on property:persist.sys.oplus.disable_mem_killer=1
+    write /proc/sys/vm/min_free_kbytes 4096
+    write /proc/sys/vm/swappiness 120
+    write /proc/sys/vm/vfs_cache_pressure 150
+    start vendor.cos17_memkiller
+
+on property:persist.sys.oplus.disable_mem_killer=0
+    write /proc/sys/vm/min_free_kbytes 11584
+    write /proc/sys/vm/swappiness 100
+    write /proc/sys/vm/vfs_cache_pressure 100
+    start vendor.cos17_memkiller
+
+on property:persist.sys.oplus.mem_killer_floor_mb=*
+    start vendor.cos17_memkiller
+
+# Re-init lmkd directly from init after cos17_memkiller_ctl updates sys.lmk.minfree_levels
+# (avoids lmkd_prop neverallow denial in cos17_memkiller domain -> 0 SELinux AVCs).
+on property:sys.lmk.minfree_levels=*
+    setprop lmkd.reinit 1
+
+on property:sys.boot_completed=0
+    stop vendor.xtouch_tune

@@ -1,0 +1,200 @@
+# Rootless ColorOS 17 dada performance, URCC sysfs, thermal headroom, and uclamp init triggers
+on post-fs-data
+    chmod 0664 /sys/devices/system/cpu/cpu0/core_ctl/min_cpus
+    chmod 0664 /sys/devices/system/cpu/cpu0/core_ctl/max_cpus
+    chmod 0664 /sys/devices/system/cpu/cpu6/core_ctl/min_cpus
+    chmod 0664 /sys/devices/system/cpu/cpu6/core_ctl/max_cpus
+    chmod 0664 /proc/sys/walt/input_boost_enabled
+    chmod 0664 /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_freq
+    chmod 0664 /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_freq
+    chmod 0664 /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_load
+    chmod 0664 /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_load
+    setprop vendor.usb.rps_mask 3c
+
+on property:sys.boot_completed=1
+    # Use Xiaomi mi_thermald Stock Default GL-NORMAL (sconfig=0, matching COS16 Beta3 & Stock HyperOS):
+    # Keeps full 3.53/4.32 GHz max clocks un-capped in cpufreq while activating [TEMP_AWARE] and
+    # Xiaomi 15's true balanced thermal profile (replaces sconfig=50 GL-PER-NORMAL Performance Mode).
+    # NOTE: NEVER stop vendor.diag-router on sun — QTI libdiag.so busy-loops on error:111 if socket closes!
+    write /sys/class/thermal/thermal_message/sconfig 0
+    # Ensure COS16-aligned low-overhead persist props across dirty flashes
+    setprop persist.vendor.radio.md_debug_info.enable false
+    setprop persist.vendor.cnss_diag.enable false
+    stop vendor.cnss_diag
+    # Enable latency-sensitive WALT/uclamp scheduling for UI and SurfaceFlinger
+    write /dev/cpuctl/top-app/cpu.uclamp.latency_sensitive 1
+    write /dev/cpuctl/display/cpu.uclamp.latency_sensitive 1
+    write /dev/cpuctl/rt/cpu.uclamp.latency_sensitive 1
+    write /dev/cpuctl/display/cpu.uclamp.min 1
+
+# Apply thermally balanced WALT governor, VM/kswapd, & RPS parameters after vendor post_boot finishes
+# (ZERO scaling_max_freq capping — full 3.53 GHz Medium and 4.32 GHz Prime remain 100% available)
+on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1
+    write /sys/class/thermal/thermal_message/sconfig 0
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_freq 960000
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_freq 1209600
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_load 92
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_load 95
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/pl 0
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/pl 0
+    write /proc/sys/walt/sched_coloc_busy_hysteresis_enable_cpus 63
+    write /proc/sys/walt/sched_util_busy_hysteresis_enable_cpus 63
+    write /proc/sys/walt/sched_coloc_busy_hyst_cpu_ns "2000000 1000000 1000000 1000000 1000000 1000000 2000000 2000000"
+    write /proc/sys/walt/sched_util_busy_hyst_cpu_ns "2000000 1000000 1000000 1000000 1000000 1000000 2000000 2000000"
+    write /sys/devices/system/cpu/cpu0/core_ctl/not_preferred "1 1 0 0 0 0"
+    write /sys/devices/system/cpu/cpu6/core_ctl/busy_up_thres "75 75"
+    write /sys/devices/system/cpu/cpu6/core_ctl/busy_down_thres "40 40"
+    write /proc/sys/walt/input_boost_freq "748800 0 0 0 0 0 0 0"
+    write /proc/sys/walt/input_boost_ms 25
+    # Stop kswapd0 thrashing when >6 GB RAM is available
+    write /proc/sys/vm/swappiness 60
+    # Offload 5G rmnet_data* (was 3d with CPU0 bit set!), USB rndis0, and Wi-Fi/Hotspot wlan0/wlan2 to CPU2-5 (3c)
+    write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data3/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data4/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data5/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data6/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data7/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/ncm0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/usb0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-4/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+# Dynamic USB Tethering (AIDL usbgadget-hal creates rndis0/ncm0 without updating legacy vendor.usb.tethering)
+on property:sys.usb.ffs.ready=1
+    setprop vendor.usb.rps_mask 3c
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/ncm0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/usb0/queues/rx-0/rps_cpus 3c
+
+on property:sys.usb.config=*
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/ncm0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/usb0/queues/rx-0/rps_cpus 3c
+
+on property:vendor.usb.tethering=true
+    setprop vendor.usb.rps_mask 3c
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/ncm0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/usb0/queues/rx-0/rps_cpus 3c
+
+on property:sys.user.0.ce_available=true
+    write /sys/class/thermal/thermal_message/sconfig 0
+    write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data3/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/ncm0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/usb0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+    write /proc/sys/vm/swappiness 60
+
+on property:wlan.driver.status=ok
+    write /sys/class/net/wlan0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-4/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+# Dynamic SoftAP (wlan2 finishes START AP ~1s after hostapd starts, then updates softap.band / sar_idx / sta.freq)
+on property:init.svc.hostapd=running
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+on property:vendor.oplus.sap.interface=wlan2
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+on property:wifi.active.interface=wlan2
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+on property:oplus.softap.band=*
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+on property:oplus.softap.sta.freq=*
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+on property:sys.oplus.wlan.sar_idx=*
+    write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data3/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rndis0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan0/queues/rx-4/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-2/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-3/rps_cpus 3c
+    write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
+
+# Enable CPU boost (Developer Options): lift WALT smart_freq IPC frequency ceilings
+# persist.sys.oplus.cpu_boost is synced from Settings.Global.cos17_cpu_boost_enable by services.jar
+on property:persist.sys.oplus.cpu_boost=1
+    write /proc/sys/walt/cluster0/smart_freq/ipc_freq_levels "2147483647 2147483647 2147483647 2147483647 2147483647"
+    write /proc/sys/walt/cluster1/smart_freq/ipc_freq_levels "2147483647 2147483647 2147483647 2147483647 2147483647"
+
+on property:persist.sys.oplus.cpu_boost=0
+    write /proc/sys/walt/cluster0/smart_freq/ipc_freq_levels "2400000 2400000 2700000 3000000 2147483647"
+    write /proc/sys/walt/cluster1/smart_freq/ipc_freq_levels "3513600 3800000 4100000 4200000 2147483647"
+
+# Re-assert after the vendor post_boot script has written the stock ipc_freq_levels
+on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1 && property:persist.sys.oplus.cpu_boost=1
+    write /proc/sys/walt/cluster0/smart_freq/ipc_freq_levels "2147483647 2147483647 2147483647 2147483647 2147483647"
+    write /proc/sys/walt/cluster1/smart_freq/ipc_freq_levels "2147483647 2147483647 2147483647 2147483647 2147483647"
+
+on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1 && property:persist.sys.oplus.cpu_boost=0
+    write /proc/sys/walt/cluster0/smart_freq/ipc_freq_levels "2400000 2400000 2700000 3000000 2147483647"
+    write /proc/sys/walt/cluster1/smart_freq/ipc_freq_levels "3513600 3800000 4100000 4200000 2147483647"
+
+# Dirty-flash safety: ensure CWB stays enabled for Xiaomi 15 BOLED TCS3720 ALS/Proximity
+# (runs in PID 1 init domain -> 0 SELinux AVCs; recovers dirty flashes over v4 builds automatically)
+on property:persist.vendor.debug.cwb.disable=true
+    setprop persist.vendor.debug.cwb.disable false
+
+on property:sys.boot_completed=1 && property:persist.vendor.debug.cwb.disable=true
+    setprop persist.vendor.debug.cwb.disable false

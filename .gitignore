@@ -1,0 +1,17 @@
+# Build outputs & temporary files
+*.o
+*.so
+*.apk
+*.jar
+*.dex
+*.img
+*.ko
+*.bin
+*.zip
+*.orig
+*.rej
+__pycache__/
+*.pyc
+build/
+out/
+.DS_Store

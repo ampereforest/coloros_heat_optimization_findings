@@ -1,0 +1,31 @@
+# Patch: Vendor Thermal, Radio (5G NSA), Telemetry Disable & RPS Defaults
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /vendor/build.prop
+# Notes: Restores Stock Xiaomi 15 ro.telephony.default_network=33,33 + default_sa=false, disables midasd/ostatsd/gaia/onetrace/sensor.onetrack, disables Wi-Fi interrupt test mode, and sets vendor.usb.rps_mask=3c. (If also applying 02-display-ltpo-cwb/vendor_cwb_display_props.patch, merge the appended blocks.)
+# Apply: patch -p1 < vendor_build_prop_thermal_hygiene.patch
+#
+--- a/vendor/build.prop
++++ b/vendor/build.prop
+@@ -368,3 +368,22 @@
+ ro.camerax.extensions.enabled=true
+ # end of file
+ 
++
++# --- BEGIN COS17 THERMAL, RADIO & TELEMETRY HYGIENE ---
++persist.vendor.wifi.interrupt_test_mode=false
++ro.telephony.default_network=33,33
++persist.sys.oplus.radio.default_sa=false
++persist.sys.midasd.enable=0
++persist.sys.midasd.start=0
++debug.ostats.bds.enable=0
++persist.sys.oplus.gaia.enable=0
++persist.sys.debuglog.config=
++debug.onetrace.tag=0
++debug.onetrace.native.tag=0
++persist.vendor.sensor.onetrack=false
++persist.sys.ostatsd.enable=0
++persist.sys.ostatsd.start=0
++persist.sys.ostats_pullerd.enable=0
++persist.sys.ostats_tpd.enable=0
++vendor.usb.rps_mask=3c
++# --- END COS17 THERMAL, RADIO & TELEMETRY HYGIENE ---

@@ -1,0 +1,19 @@
+service vendor.cos17_dexopt_once /vendor/bin/cos17_dexopt_once
+    class late_start
+    user root
+    group root system
+    seclabel u:r:cos17_memkiller:s0
+    oneshot
+    disabled
+
+service vendor.cos17_thermal_once /vendor/bin/cos17_thermal_once
+    class late_start
+    user root
+    group root system
+    seclabel u:r:cos17_memkiller:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1
+    start vendor.cos17_dexopt_once
+    start vendor.cos17_thermal_once

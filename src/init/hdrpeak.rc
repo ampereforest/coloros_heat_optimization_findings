@@ -1,0 +1,18 @@
+# Native event-driven Adaptive-HDR peak-brightness + LTPO bring-up for Xiaomi 15 "dada"
+service vendor.hdrpeak /vendor/bin/hdrpeakd
+    class late_start
+    user system
+    group system graphics
+    seclabel u:r:hdrpeak:s0
+    disabled
+
+on property:sys.boot_completed=1
+    start vendor.hdrpeak
+    setprop sys.oplus.ltpo.ime_shown 0
+    setprop persist.nyako.ltpo.force_mode 2
+    setprop persist.nyako.ltpo.auto_idle 1
+    setprop persist.nyako.ltpo.content_overlay 0
+    setprop persist.nyako.ltpo.log 0
+
+on property:sys.boot_completed=0
+    stop vendor.hdrpeak

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neutralized COS17 PLZ110 PerfBreak thermal-override scroll/launch boosts to match COS16 Beta3 & Stock Xiaomi 15 (dada) -->
+<BoostConfigs>
+    <PerfBreak/>
+</BoostConfigs>

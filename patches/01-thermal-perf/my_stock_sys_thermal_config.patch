@@ -1,0 +1,26 @@
+# Patch: my_stock ThermalServiceConfig: Disable DCS/Log Uploads & Fix Thermal Zone Path
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /my_stock/etc/ThermalServiceConfig/sys_thermal_config.xml
+# Notes: Disables DCS/log/errlog upload overhead and remaps thermal_heat_path from missing thermal_zone84 to Xiaomi 15 thermal_zone57.
+# Apply: patch -p1 < my_stock_sys_thermal_config.patch
+#
+--- a/my_stock/etc/ThermalServiceConfig/sys_thermal_config.xml
++++ b/my_stock/etc/ThermalServiceConfig/sys_thermal_config.xml
+@@ -10,13 +10,13 @@
+     <heat_hold_upload_time>40000</heat_hold_upload_time>
+     <heat_align>100</heat_align>
+     <is_feature_on>1</is_feature_on>
+-    <is_upload_dcs>1</is_upload_dcs>
+-    <is_upload_log>1</is_upload_log>
+-    <is_upload_errlog>1</is_upload_errlog>
++    <is_upload_dcs>0</is_upload_dcs>
++    <is_upload_log>0</is_upload_log>
++    <is_upload_errlog>0</is_upload_errlog>
+     <preheat_dex_oat_threshold>380</preheat_dex_oat_threshold>
+     <!-- 30min -->
+     <heathold_time_threshold>1800000</heathold_time_threshold>
+-    <thermal_heat_path>/sys/class/thermal/thermal_zone84/temp</thermal_heat_path>
++    <thermal_heat_path>/sys/class/thermal/thermal_zone57/temp</thermal_heat_path>
+     <thermal_battery_temp>1</thermal_battery_temp>
+     <thermal_monitor_application>
+         com.tencent.tmgp.pubgmhd,

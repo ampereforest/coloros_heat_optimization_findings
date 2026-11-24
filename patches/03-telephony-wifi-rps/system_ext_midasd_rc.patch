@@ -1,0 +1,17 @@
+# Patch: Gate midasd Auto-Start Behind persist.sys.midasd.enable=1
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system_ext/etc/init/midasd.rc
+# Notes: Prevents ColorOS midasd (20+ obrain worker threads) from launching on persist.sys.midas_ostats.restriction=0 when midasd is explicitly disabled.
+# Apply: patch -p1 < system_ext_midasd_rc.patch
+#
+--- a/system_ext/etc/init/midasd.rc
++++ b/system_ext/etc/init/midasd.rc
+@@ -20,7 +20,7 @@
+ on property:sys.boot_completed=1 && property:persist.sys.midasd.start=0
+ 	stop midasd
+ 
+-on property:sys.boot_completed=1 && property:persist.sys.midas_ostats.restriction=0
++on property:sys.boot_completed=1 && property:persist.sys.midas_ostats.restriction=0 && property:persist.sys.midasd.enable=1
+     start midasd
+ 
+ on property:sys.boot_completed=1 && property:persist.sys.midas_ostats.restriction=1

@@ -1,0 +1,58 @@
+# Patch: System-Domain (u:r:init:s0) QSPA, Midas, Wi-Fi Dump & IMS Log Hygiene
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system/etc/init/hw/init.rc
+# Notes: Runs inside PID 1 init (u:r:init:s0) rather than vendor_init, eliminating SELinux denials when enforcing persist.oplus.qspa.modem=disabled, persist.sys.midas_ostats.restriction=1, Wi-Fi fulldump off, and IMS/QXDM log silence.
+# Apply: patch -p1 < system_init_rc_hygiene.patch
+#
+--- a/system/etc/init/hw/init.rc
++++ b/system/etc/init/hw/init.rc
+@@ -20,10 +20,47 @@
+ #ifdef OPLUS_BUG_DEBUG
+ #Liding.Huang@NETWORK.CALL, 2025/07/08
+ on property:ro.boot.vendor.qspa.modem=enabled
+-    setprop persist.oplus.qspa.modem enabled
++    setprop persist.oplus.qspa.modem disabled
+ 
+ on property:ro.boot.vendor.qspa.modem=disabled && property:persist.vendor.radio.virtualcomm=1
+-    setprop persist.oplus.qspa.modem enabled
++    setprop persist.oplus.qspa.modem disabled
++
++# Rootless ColorOS 17 v7.2 system-domain (u:r:init:s0) thermal/radio property hygiene (0 SELinux AVCs)
++on property:persist.oplus.qspa.modem=enabled
++    setprop persist.oplus.qspa.modem disabled
++
++on property:persist.sys.midas_ostats.restriction=0
++    setprop persist.sys.midas_ostats.restriction 1
++
++on property:sys.oplus.wifi.dump.enable=1
++    setprop sys.oplus.wifi.dump.enable 0
++
++on property:persist.sys.oplus.wifi.fulldump.enable=1
++    setprop persist.sys.oplus.wifi.fulldump.enable 0
++
++on property:sys.oplus.wifi.dump.needupload=1
++    setprop sys.oplus.wifi.dump.needupload 0
++
++on property:sys.boot_completed=1
++    setprop persist.sys.midas_ostats.restriction 1
++    setprop persist.oplus.qspa.modem disabled
++    setprop persist.sys.stability.iostat false
++    setprop persist.sys.stability.fault_report false
++    setprop persist.sys.oplus.wifi.fulldump.enable 0
++    setprop sys.oplus.wifi.dump.enable 0
++    setprop sys.oplus.wifi.dump.needupload 0
++    setprop persist.vendor.wifi.interrupt_test_mode false
++    setprop persist.ims.disableADBLogs 1
++    setprop persist.ims.disableDebugLogs 1
++    setprop persist.ims.disableIMSLogs 1
++    setprop persist.ims.disableQXDMLogs 1
++    setprop persist.vendor.ims.loglevel 0
++    setprop persist.vendor.ims.rtp.enableqxdm 0
++    setprop persist.vendor.ims.vt.enableadb 0
++    setprop persist.vendor.ims.disableADBLogs 1
++    setprop persist.vendor.ims.disableDebugLogs 1
++    setprop persist.vendor.ims.disableIMSLogs 1
++    setprop persist.vendor.ims.disableQXDMLogs 1
+ #endif
+ 
+ #ifdef OPLUS_BUG_FIX
