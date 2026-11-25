@@ -2,7 +2,7 @@
 
 **Companion Kernel Release:** `6.6.118-android15-wild-trsy` (`r24`)  
 **Source Repository:** [`ampereforest/GKI_KernelSU_SUSFS`](https://github.com/ampereforest/GKI_KernelSU_SUSFS/releases/tag/r24) (commit [`86835f1`](https://github.com/ampereforest/GKI_KernelSU_SUSFS/commit/86835f1b2f0c7deb23f91013766393fb645d0429))  
-**Target GKI Branch:** `android15-6.6` (4K page size, SM8750 / `dada` stock vendor modules)
+**Target GKI Branch:** `android15-6.6` (4K page size, SM8750 / `dada` stock vendor modules, paired with ColorOS 17 `v7.3.1`)
 
 ---
 
@@ -50,7 +50,7 @@ The files under [`patches/05-kernel-gki-defconfig/`](../patches/05-kernel-gki-de
 
 ---
 
-## 4. Runtime Verification Note (`/proc/config.gz` Spoofing Caveat)
+## 4. Runtime Verification Note (`/proc/config.gz` Spoofing Caveat) & Kernel 6.6 WALT Paths
 
 > **Important Note on WildKernels `/proc/config.gz`:**  
 > WildKernels builds intentionally embed a stock GKI `/proc/config.gz` snapshot for anti-detection hygiene. Therefore, `zcat /proc/config.gz` will still display the stock default (`CONFIG_RCU_LAZY_DEFAULT_OFF=y`) even when `enable_rcu_lazy` and `wq_power_efficient` are compiled and active in the running kernel binary!
@@ -71,9 +71,12 @@ grep -o 'rcu_nocbs=[^ ]*' /proc/cmdline
 # Expected: rcu_nocbs=0-7
 ```
 
-**Observed Live Result on Xiaomi 15 (`dada`, Clean-Flash `v7.2` + `wild-trsy r24`):**
+**Note on Android 15 / Kernel 6.6 WALT Input Boost Paths (`v7.3+`):**  
+On `android15-6.6` (`SM8750` / `sun`), WALT input boost tunables live under `/proc/sys/walt/input_boost/{input_boost_freq,input_boost_ms,powerkey_input_boost_freq,powerkey_input_boost_ms,powerkey_sched_boost_on_input}` (not legacy `/proc/sys/walt/input_boost_freq`). [`src/init/init.cos17_dada_perf.rc`](../src/init/init.cos17_dada_perf.rc) applies the verified `4 ms / 960 MHz / sched_ed_boost=0` sweet spot strictly after `vendor.post_boot.parsed=1` and re-asserts it on `sys.user.0.ce_available=true`.
+
+**Observed Live Results on Xiaomi 15 (`dada`, Clean-Flash `v7.2`–`v7.3.1` + `wild-trsy r24`):**
 - `uname -r`: `6.6.118-android15-wild-trsy`
 - `/sys/module/workqueue/parameters/power_efficient`: **`Y`**
 - `/sys/module/rcutree/parameters/enable_rcu_lazy`: **`Y`**
 - `/proc/cmdline`: **`rcu_nocbs=0-7`**
-- Settled idle battery temperature: **`31.4 °C`**
+- Settled idle battery temperature: **`31.4 °C`** (`v7.2` clean idle); **`0.79%`** settled `Asleep` CPU busy & **`63–72 mA`** Dual-SIM unplugged idle draw (`v7.3.1`).

@@ -1,24 +1,11 @@
-/* Pure-C++ Zero-Polling Xiaomi 15 (o3_42_0d_0a) Hardware LTPO + Live Hz Overlay Hook (overlay.so)
+/* Pure-C++ Zero-Polling Xiaomi 15 (o3_42_0d_0a) Hardware LTPO + DisplayManagerPolicy Guard (overlay.so v4)
  *
  * Loaded into /system/bin/surfaceflinger via DT_NEEDED (100% rootless, zero polling loops,
  * zero SELinux AVCs, BTI+PAC safe).
  *
- * How it works:
- * 1. Verifies /proc/self/exe == /system/bin/surfaceflinger, Build-ID 856e1aafc62bef7bed561f689f3d79d3,
- *    and exact expected ARM64 prologues at all 4 hook sites before modifying any instruction.
- * 2. Hooks SurfaceFlinger::composite() (+0x207588) via an ABI-preserving naked pre-hook:
- *    records real (non-overlay) frame timestamps in a 64-entry ring buffer (~150ns/frame, 0 heap alloc).
- * 3. Runs a strictly event-driven idle watchdog (CLOCK_MONOTONIC condvar):
- *    - Active frames         -> debug.nyako.ltpo.sf_idle = "0"  (sfModeId=1 auto_120_to_1hz, 0x2780100)
- *    - >= 220ms quiet        -> debug.nyako.ltpo.sf_idle = "10" (sfModeId=2 idle_120_to_10hz, 0x1780A00)
- *    - >= 1000ms quiet/off   -> debug.nyako.ltpo.sf_idle = "1"  (sfModeId=3 idle_120_to_1hz, 0x1780100)
- *      and blocks INFINITELY in pthread_cond_wait (0.000% CPU, 0 wakeups/sec while static or screen-off!).
- * 4. When Developer Options "Show refresh rate" is ON (RefreshRateOverlay != nullptr):
- *    - Hooks RefreshRateOverlay::getOrCreateBuffers (+0x4d212c) & RefreshRateOverlay::animate (+0x4d2a24)
- *      and patches +0x209780 (b.eq -> b 0x20d090) so animate() executes on every composite.
- *    - Displays the REAL live measured cadence (1..120 Hz naturally from real frame intervals during
- *      scroll, fling deceleration, animations, and 24/30/60fps video; 10 Hz in idle_120_to_10hz;
- *      1 Hz in idle_120_to_1hz) without any fake stepping list and without self-repaint feedback.
+ * Adds RefreshRateSelector::setPolicy (+0x2cdfac) pre-guard so isolated 120 Hz LTPO modes
+ * (sfModeId 1..3) and non-group-switching 120 Hz policies (sfModeId 0..5) always receive valid
+ * [0.0f, >=120.1f] FpsRanges, preventing constructAvailableRefreshRates assertions.
  */
 #include <android/log.h>
 #include <elf.h>
@@ -48,6 +35,7 @@ static constexpr uint8_t kExpectedBuildId[16] = {
 
 static constexpr uintptr_t kOffComposite          = 0x207588;
 static constexpr uintptr_t kOffAnimBranch         = 0x209780;
+static constexpr uintptr_t kOffSetPolicy          = 0x2cdfac;
 static constexpr uintptr_t kOffGetOrCreateBuffers = 0x4d212c;
 static constexpr uintptr_t kOffGetOrCreateNullRet = 0x4d2368;
 static constexpr uintptr_t kOffChangeRefreshRate  = 0x4d2570;
@@ -56,19 +44,24 @@ static constexpr uintptr_t kOffAnimate            = 0x4d2a24;
 static constexpr uint32_t kAnimBranchOrig  = 0x5401c880u; // b.eq 0x20d090
 static constexpr uint32_t kAnimBranchPatch = 0x14000e44u; // b    0x20d090
 
-static constexpr int64_t kIdle10Ms         = 220;
+static constexpr int64_t kIdle10Ms         = 300;
 static constexpr int64_t kIdle1Ms          = 1000;
 static constexpr int64_t kWindowNs         = 300LL * 1000000LL;
 static constexpr int64_t kOverlayMinStepNs = 80LL * 1000000LL;
 static constexpr int     kRingSize         = 64;
 
+static constexpr float   kSafeLtpoMaxHz       = 120.1f;
+static constexpr int64_t kSafeLtpoMaxPeriodNs = 8326394LL; // (int64_t)(1e9f / 120.1f)
+
 using GetOrCreateFn = void* (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t, bool);
 using ChangeRateFn  = void  (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t);
 using AnimateFn     = void  (*)(void*);
+using SetPolicyFn   = int   (*)(void*, const void*);
 
 static GetOrCreateFn g_orig_get_or_create = nullptr;
 static ChangeRateFn  g_change_rate        = nullptr;
 static AnimateFn     g_orig_animate       = nullptr;
+static SetPolicyFn   g_orig_set_policy    = nullptr;
 
 static pthread_mutex_t g_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  g_cv;
@@ -86,7 +79,7 @@ static bool     g_overlay_published = false;
 
 static int      g_idle_state = 0; // 0 = active(auto), 10 = idle10, 1 = idle1
 static bool     g_watchdog_sleeping = false;
-static int64_t  g_idle_probe_ns = 0; // requires >=2 frames within 180ms to exit idle (ignores 1-frame 5G/clock blinks)
+static int64_t  g_idle_probe_ns = 0;
 
 static int64_t  g_self_repaint_until_ns = 0;
 static int      g_self_repaint_budget   = 0;
@@ -94,6 +87,7 @@ static int      g_self_repaint_budget   = 0;
 static int      g_last_drawn_hz = -1;
 static int64_t  g_last_overlay_update_ns = 0;
 static thread_local int g_tls_override_hz = 0;
+static uint32_t g_policy_clamp_logged = 0;
 
 static inline int64_t mono_ns() {
     struct timespec ts;
@@ -129,7 +123,6 @@ static int compute_real_hz_locked(int64_t now, int native_max_hz) {
     if (age_ms >= kIdle1Ms) return 1;
     if (age_ms >= kIdle10Ms) return (10 < native_max_hz) ? 10 : native_max_hz;
 
-    // Inspect up to 10 most recent real frames within the last 300ms
     int k = 0;
     int64_t t_newest = 0;
     int64_t t_oldest = 0;
@@ -174,7 +167,6 @@ static void* watchdog_thread(void*) {
     for (;;) {
         int64_t now = mono_ns();
 
-        // Publish overlay visibility ONLY on toggle
         if (g_overlay_active != g_overlay_published) {
             bool on = g_overlay_active;
             g_overlay_published = on;
@@ -207,7 +199,6 @@ static void* watchdog_thread(void*) {
         if (want != g_idle_state) {
             g_idle_state = want;
             if (want != 0) {
-                // Suppress mode-switch / 1004 / changeRefreshRate self-composites whether overlay is ON or OFF
                 g_self_repaint_budget = 6;
                 g_self_repaint_until_ns = now + 450LL * 1000000LL;
                 g_idle_probe_ns = 0;
@@ -220,7 +211,6 @@ static void* watchdog_thread(void*) {
         }
 
         if (want == 1) {
-            // Settled at 1 Hz (or screen off): infinite kernel sleep -> 0.000% CPU, 0 wakeups/sec!
             g_watchdog_sleeping = true;
             pthread_cond_wait(&g_cv, &g_mtx);
             g_watchdog_sleeping = false;
@@ -233,6 +223,72 @@ static void* watchdog_thread(void*) {
         }
     }
     return nullptr;
+}
+
+static int hook_set_policy(void* self, const void* policy_ptr) {
+    if (!policy_ptr) {
+        return g_orig_set_policy(self, policy_ptr);
+    }
+    const auto* raw = static_cast<const uint8_t*>(policy_ptr);
+    uint32_t var_idx = 0;
+    memcpy(&var_idx, raw + 0xa8, sizeof(var_idx));
+    if (var_idx != 0) {
+        return g_orig_set_policy(self, policy_ptr);
+    }
+
+    int32_t default_mode = -1;
+    memcpy(&default_mode, raw + 0x00, sizeof(default_mode));
+    uint8_t allow_group = raw[0x04];
+
+    // sfModeId 1..3 are isolated 1-mode 120.000008 Hz LTPO groups; sfModeId 0..5 are 120.000008 Hz modes.
+    bool isolated_ltpo = (default_mode >= 1 && default_mode <= 3);
+    bool locked_120    = (allow_group == 0 && default_mode >= 0 && default_mode <= 5);
+    if (!isolated_ltpo && !locked_120) {
+        return g_orig_set_policy(self, policy_ptr);
+    }
+
+    static constexpr size_t kRangeOffsets[4] = { 0x08, 0x28, 0x48, 0x68 };
+    bool needs_fix = false;
+    for (size_t off : kRangeOffsets) {
+        float min_fps = 0.0f, max_fps = 0.0f;
+        memcpy(&min_fps, raw + off + 0x00, sizeof(float));
+        memcpy(&max_fps, raw + off + 0x10, sizeof(float));
+        if (max_fps < 120.05f || min_fps > 119.9f || min_fps > max_fps ||
+            (isolated_ltpo && min_fps > 0.0f)) {
+            needs_fix = true;
+            break;
+        }
+    }
+
+    if (!needs_fix) {
+        return g_orig_set_policy(self, policy_ptr);
+    }
+
+    alignas(16) uint8_t fixed[0xb0];
+    memcpy(fixed, raw, sizeof(fixed));
+    for (size_t off : kRangeOffsets) {
+        float min_fps = 0.0f, max_fps = 0.0f;
+        memcpy(&min_fps, fixed + off + 0x00, sizeof(float));
+        memcpy(&max_fps, fixed + off + 0x10, sizeof(float));
+        if (isolated_ltpo || min_fps > 119.9f || min_fps > max_fps) {
+            float zero_f = 0.0f;
+            int64_t zero_p = 0;
+            memcpy(fixed + off + 0x00, &zero_f, sizeof(float));
+            memcpy(fixed + off + 0x08, &zero_p, sizeof(int64_t));
+        }
+        if (max_fps < kSafeLtpoMaxHz) {
+            float safe_f = kSafeLtpoMaxHz;
+            int64_t safe_p = kSafeLtpoMaxPeriodNs;
+            memcpy(fixed + off + 0x10, &safe_f, sizeof(float));
+            memcpy(fixed + off + 0x18, &safe_p, sizeof(int64_t));
+        }
+    }
+
+    if (__atomic_fetch_add(&g_policy_clamp_logged, 1u, __ATOMIC_RELAXED) < 8u) {
+        LOGW("Clamped narrow DisplayManagerPolicy for sfModeId=%d allowGroup=%u",
+             default_mode, static_cast<unsigned>(allow_group));
+    }
+    return g_orig_set_policy(self, fixed);
 }
 
 static void* hook_get_or_create_buffers(
@@ -401,20 +457,17 @@ extern "C" __attribute__((visibility("hidden"))) void on_sf_composite() {
     }
     g_self_repaint_budget = 0;
 
-    // While in idle (10Hz or 1Hz), ignore isolated single-frame updates (e.g. 5G status bar arrow blink,
-    // clock minute tick, battery icon) — DDIC presents single frames at 120Hz TE without switching mode!
-    // Require >= 2 frames within 180ms (>= 6 fps real animation/scroll/video) to exit idle.
-    // (User touch already wakes id=1 instantaneously in <1ms via PointerMonitor.)
-    if (g_idle_state != 0) {
+    if (g_idle_state == 1) {
         if (g_idle_probe_ns == 0 || (now - g_idle_probe_ns) > 180LL * 1000000LL) {
             g_idle_probe_ns = now;
             pthread_mutex_unlock(&g_mtx);
             return;
         }
-        // Second frame arrived within 180ms -> real motion! Record both timestamps and wake immediately.
         g_ts[g_head] = g_idle_probe_ns;
         g_head = (g_head + 1) & (kRingSize - 1);
         if (g_count < kRingSize) g_count++;
+        g_idle_probe_ns = 0;
+    } else if (g_idle_state != 0) {
         g_idle_probe_ns = 0;
     }
 
@@ -428,8 +481,6 @@ extern "C" __attribute__((visibility("hidden"))) void on_sf_composite() {
     pthread_mutex_unlock(&g_mtx);
 }
 
-// 100% ABI-preserving pre-hook for SurfaceFlinger::composite():
-// saves x0..x9, x29, x30, q0..q7, calls on_sf_composite(), restores all, tail-jumps to trampoline.
 extern "C" __attribute__((naked)) void my_composite_stub() {
     asm volatile(
         "bti c\n"
@@ -480,12 +531,15 @@ static void overlay_init() {
 
     auto* p_comp   = reinterpret_cast<uint32_t*>(img.base + kOffComposite);
     auto* p_branch = reinterpret_cast<uint32_t*>(img.base + kOffAnimBranch);
+    auto* p_pol    = reinterpret_cast<uint32_t*>(img.base + kOffSetPolicy);
     auto* p_buf    = reinterpret_cast<uint32_t*>(img.base + kOffGetOrCreateBuffers);
     auto* p_anim   = reinterpret_cast<uint32_t*>(img.base + kOffAnimate);
 
     // Verify every expected prologue word before patching a single byte
     if (p_comp[0] != 0xd503233fu || p_comp[1] != 0x6db923e9u ||
         p_comp[2] != 0xa9017bfdu || p_comp[3] != 0xa9026ffcu ||
+        p_pol[0]  != 0xd503233fu || p_pol[1]  != 0xd10503ffu ||
+        p_pol[2]  != 0xa90f7bfdu || p_pol[3]  != 0xf90083fcu ||
         p_buf[0]  != 0xf940f408u || p_buf[1]  != 0xb40011c8u ||
         p_buf[2]  != 0xd503233fu || p_buf[3]  != 0x6db82bebu ||
         p_anim[0] != 0xd503245fu || p_anim[1] != 0x39478008u ||
@@ -497,7 +551,6 @@ static void overlay_init() {
         return;
     }
 
-    // Initialize CLOCK_MONOTONIC condvar
     pthread_condattr_t attr;
     pthread_condattr_init(&attr);
     pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
@@ -505,7 +558,7 @@ static void overlay_init() {
     pthread_condattr_destroy(&attr);
     g_cv_ready = true;
 
-    // Allocate one 4KB RW page for all 3 trampolines, then flip to RX
+    // Allocate one 4KB RW page for all 4 trampolines, then flip to RX
     void* page = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (page == MAP_FAILED) {
         snprintf(status, sizeof(status), "%d:mmap-failed", getpid());
@@ -566,7 +619,23 @@ static void overlay_init() {
         g_orig_animate = reinterpret_cast<AnimateFn>(tramp + 0x80);
     }
 
-    __builtin___clear_cache(reinterpret_cast<char*>(tramp), reinterpret_cast<char*>(tramp + 256));
+    // Trampoline 3 (offset 0xc0): RefreshRateSelector::setPolicy (+0x2cdfac)
+    {
+        auto* w = reinterpret_cast<uint32_t*>(tramp + 0xc0);
+        w[0] = 0xd503245fu; // bti c
+        w[1] = 0xd503233fu; // paciasp
+        w[2] = 0xd10503ffu; // sub sp, sp, #0x140
+        w[3] = 0xa90f7bfdu; // stp x29, x30, [sp, #0xf0]
+        w[4] = 0xf90083fcu; // str x28, [sp, #0x100]
+        w[5] = 0xd503201fu; // nop
+        w[6] = 0x58000050u; // ldr x16, #8 (-> 0xe0)
+        w[7] = 0xd61f0200u; // br x16
+        uint64_t cont = img.base + kOffSetPolicy + 0x10;
+        memcpy(tramp + 0xc0 + 0x20, &cont, 8);
+        g_orig_set_policy = reinterpret_cast<SetPolicyFn>(tramp + 0xc0);
+    }
+
+    __builtin___clear_cache(reinterpret_cast<char*>(tramp), reinterpret_cast<char*>(tramp + 320));
     if (mprotect(tramp, 4096, PROT_READ | PROT_EXEC) != 0) {
         snprintf(status, sizeof(status), "%d:tramp-rx-failed", getpid());
         __system_property_set("debug.nyako.ltpo.overlay_status", status);
@@ -576,8 +645,8 @@ static void overlay_init() {
     g_change_rate = reinterpret_cast<ChangeRateFn>(img.base + kOffChangeRefreshRate);
     g_last_real_ns = mono_ns();
 
-    // Install hooks + animate branch patch
-    if (!install_abs_jump(p_buf,  reinterpret_cast<void*>(hook_get_or_create_buffers)) ||
+    if (!install_abs_jump(p_pol,  reinterpret_cast<void*>(hook_set_policy)) ||
+        !install_abs_jump(p_buf,  reinterpret_cast<void*>(hook_get_or_create_buffers)) ||
         !install_abs_jump(p_anim, reinterpret_cast<void*>(hook_animate)) ||
         !install_abs_jump(p_comp, reinterpret_cast<void*>(my_composite_stub))) {
         snprintf(status, sizeof(status), "%d:hook-patch-failed", getpid());
@@ -592,7 +661,6 @@ static void overlay_init() {
         return;
     }
 
-    // Initialize properties once and launch strictly event-driven watchdog
     __system_property_set("debug.nyako.ltpo.sf_idle", "0");
     __system_property_set("debug.nyako.ltpo.sf_overlay_on", "0");
 
@@ -601,7 +669,7 @@ static void overlay_init() {
         pthread_detach(tid);
     }
 
-    snprintf(status, sizeof(status), "%d:v3-hw-ltpo-ready", getpid());
+    snprintf(status, sizeof(status), "%d:v4-hw-ltpo-ready", getpid());
     __system_property_set("debug.nyako.ltpo.overlay_status", status);
     LOGI("%s", status);
 }

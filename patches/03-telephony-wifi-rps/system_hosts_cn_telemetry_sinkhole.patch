@@ -1,0 +1,93 @@
+# Patch: Sinkhole 31 CN Push / HTTPDNS / DCS Telemetry Domains in /system/etc/hosts (v7.3)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system/etc/hosts
+# Notes: Prevents UID-1000 com.heytap.mcs (immune to UID-keyed OEM_DENY_3) and CN telemetry clients from opening stuck TCP retransmit queues (Send-Q > 0, ~3 pkts/s) that reset 5G Fast Dormancy and lock pa_therm0 up to 58.7C. Preserves App Market, Gallery AI, MyDevices, and OShare.
+# Apply: patch -p1 < system_hosts_cn_telemetry_sinkhole.patch
+#
+--- a/system/etc/hosts
++++ b/system/etc/hosts
+@@ -1,2 +1,84 @@
+ 127.0.0.1       localhost
+ ::1             ip6-localhost
++
++# ColorOS 17 CN Push / HTTPDNS / DCS Telemetry Sinkhole (prevents 5G RRC_CONNECTED retransmit lock)
++127.0.0.1       httpdns.ocloud.oppomobile.com
++127.0.0.1       httpdns-push-cn.heytapmobi.com
++127.0.0.1       httpdns-push.heytapmobile.com
++127.0.0.1       httpdns-euex-push.heytapmobile.com
++127.0.0.1       api.push.oppomobile.com
++127.0.0.1       push.heytapmobi.com
++127.0.0.1       push.heytapmobile.com
++127.0.0.1       long.push.heytapmobi.com
++127.0.0.1       long-push.heytapmobile.com
++127.0.0.1       short.push.heytapmobi.com
++127.0.0.1       short-push.heytapmobile.com
++127.0.0.1       dc.push.heytapmobi.com
++127.0.0.1       dc-push.heytapmobile.com
++127.0.0.1       onepush-identity-cn.heytapmobi.com
++127.0.0.1       onepush-pilot-cn.heytapmobi.com
++127.0.0.1       push-ads-cn.heytapmobi.com
++127.0.0.1       adx.ads.heytapmobi.com
++127.0.0.1       sms.ads.heytapmobi.com
++127.0.0.1       mdp-usertrace-cn.heytapmobi.com
++127.0.0.1       rest-cn-feedback.heytapmobi.com
++127.0.0.1       static-cn-feedback.heytapmobi.com
++127.0.0.1       nearby.dc.oppomobile.com
++127.0.0.1       scene.dc.oppomobile.com
++127.0.0.1       s.heytapmobi.com
++127.0.0.1       2pantanal-intelli-cn.allawntech.com
++127.0.0.1       pantanal-intelli-cn.allawntech.com
++127.0.0.1       pantanal-sys-cn.allawntech.com
++127.0.0.1       scene-bind-cn.allawntech.com
++127.0.0.1       intelligent-platform-cn.allawntech.com
++127.0.0.1       3bot-brain-cn.heytapmobi.com
++127.0.0.1       bot-brain-cn.heytapmobi.com
++127.0.0.1       bot-intent-cn.heytapmobi.com
++127.0.0.1       i.bot.heytapmobi.com
++127.0.0.1       sense-intent-cn-01.heytapmobi.com
++127.0.0.1       usop-api-cn.heytapmobi.com
++127.0.0.1       nebula-api-cn.heytapmobi.com
++127.0.0.1       api.ois.heytapmobi.com
++127.0.0.1       proxy.apps.oppomobile.com
++127.0.0.1       logistics.apps.oppomobile.com
++127.0.0.1       tips.apps.oppomobile.com
++::1             httpdns.ocloud.oppomobile.com
++::1             httpdns-push-cn.heytapmobi.com
++::1             httpdns-push.heytapmobile.com
++::1             httpdns-euex-push.heytapmobile.com
++::1             api.push.oppomobile.com
++::1             push.heytapmobi.com
++::1             push.heytapmobile.com
++::1             long.push.heytapmobi.com
++::1             long-push.heytapmobile.com
++::1             short.push.heytapmobi.com
++::1             short-push.heytapmobile.com
++::1             dc.push.heytapmobi.com
++::1             dc-push.heytapmobile.com
++::1             onepush-identity-cn.heytapmobi.com
++::1             onepush-pilot-cn.heytapmobi.com
++::1             push-ads-cn.heytapmobi.com
++::1             adx.ads.heytapmobi.com
++::1             sms.ads.heytapmobi.com
++::1             mdp-usertrace-cn.heytapmobi.com
++::1             rest-cn-feedback.heytapmobi.com
++::1             static-cn-feedback.heytapmobi.com
++::1             nearby.dc.oppomobile.com
++::1             scene.dc.oppomobile.com
++::1             s.heytapmobi.com
++::1             2pantanal-intelli-cn.allawntech.com
++::1             pantanal-intelli-cn.allawntech.com
++::1             pantanal-sys-cn.allawntech.com
++::1             scene-bind-cn.allawntech.com
++::1             intelligent-platform-cn.allawntech.com
++::1             3bot-brain-cn.heytapmobi.com
++::1             bot-brain-cn.heytapmobi.com
++::1             bot-intent-cn.heytapmobi.com
++::1             i.bot.heytapmobi.com
++::1             sense-intent-cn-01.heytapmobi.com
++::1             usop-api-cn.heytapmobi.com
++::1             nebula-api-cn.heytapmobi.com
++::1             api.ois.heytapmobi.com
++::1             proxy.apps.oppomobile.com
++::1             logistics.apps.oppomobile.com
++::1             tips.apps.oppomobile.com

@@ -1,7 +1,7 @@
-# Patch: Silence IMS/QXDM Logs, Fix Dolby AudioEffect Loop & Disable UniRender Compose
+# Patch: Silence IMS/QXDM Logs, Fix Dolby AudioEffect Loop, Disable UniRender & Fix CN 5G NSA/Dual-SA/RegionLock Props (v7.3)
 # Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
 # Target Path: /my_product/build.prop
-# Notes: Silences verbose IMS/QXDM debug logging, replaces OnePlus audiox_merge with Xiaomi 15 dolby (eliminating 3s AudioFlinger RuntimeException loop), and disables UniRender compose overhead.
+# Notes: Silences verbose IMS/QXDM logging, switches OnePlus audiox_merge -> dolby, disables UniRender compose, disables CN RegionLock & checkservice, disables Dual-5G SA search (dual_nr_enabled=false, sub_slot_support_sa=0), and removes persist.oplus.radio.not_support_nsa_hw_ver=All / not_support_nsa_show_5g=1.
 # Apply: patch -p1 < my_product_ims_audio_props.patch
 #
 --- a/my_product/build.prop
@@ -24,8 +24,24 @@
  ro.audio.spatializer_headtracking_support_hogp=true
  ro.oplus.haptic.lra_value_set=true
  ro.oplus.haptic.lra_range_min=160
-@@ -163,18 +163,18 @@
- ro.oplus.radio.sub_slot_support_sa=1
+@@ -151,38 +151,36 @@
+ persist.sys.oplus.audio.np_noise=true
+ persist.sys.feature.compile.re.cache.miss=1
+ persist.sys.feature.compile.re.fmap.size=1024
+-ro.oplus.radio.checkservice=true
+-persist.sys.radio.global_regionlock.allcheck=true
++ro.oplus.radio.checkservice=false
++persist.sys.radio.global_regionlock.allcheck=false
+ ro.oplus.key.actionbutton=1
+ ro.oplus.radio.enable_cmcc_nitz=1
+ ro.vendor.oplus.radio.use_nitz_name=true
+ persist.sys.oplus.radio.rule_retry_interval=3000
+ ro.oplus.radio.modem_reset_time=20
+ ro.oplus.radio.hide_nr_switch=1
+-ro.oplus.radio.dual_nr_enabled=true
+-ro.oplus.radio.sub_slot_support_sa=1
++ro.oplus.radio.dual_nr_enabled=false
++ro.oplus.radio.sub_slot_support_sa=0
  ro.oplus.radio.dual_nr_toggle_enabled=true
  ro.oplus.radio.lte_rsrp_thresholds=-126,-121,-114,-105,-44
 -persist.vendor.ims.disableADBLogs=0
@@ -54,7 +70,15 @@
  sys.oplus.nw.optimize=1
  ro.oplus.camera.defercap.support=1
  ro.telephony.default_network=26,26
-@@ -194,3 +194,7 @@
+ persist.vendor.radio.virtualcomm=1
+ persist.sys.oplus.anim_level=1
+ persist.sys.bt.netless_over_blr=true
+-persist.oplus.radio.not_support_nsa_show_5g=1
+-persist.oplus.radio.not_support_nsa_hw_ver=All
+ ro.oplus.camera.defercap.all.quick.visible.support=1
+ ro.oplus.camera.isSupportLumo=1
+ ro.oplus.osense_memcg_compress.adaptive=false
+@@ -194,3 +192,7 @@
  ro.vendor.oplus.radio.pdn_already_exist=1
  ro.oplus.camera.ebadge.support=1
  ro.oplus.image.my_product.version=25821_1700_C.1.0.2026100517005540122103.69baa7db

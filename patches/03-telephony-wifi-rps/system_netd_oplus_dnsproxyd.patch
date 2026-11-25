@@ -1,0 +1,17 @@
+# Patch: Assign dnsproxyd_socket SELinux Label to oplus_dnsproxyd in netd.rc (v7.3)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system/etc/init/netd.rc
+# Notes: Labels /dev/socket/oplus_dnsproxyd as u:object_r:dnsproxyd_socket:s0 (matching /dev/socket/dnsproxyd), eliminating gmscore_app (com.google.android.gms) SELinux AVC denials with NEW_PAIRS=0.
+# Apply: patch -p1 < system_netd_oplus_dnsproxyd.patch
+#
+--- a/system/etc/init/netd.rc
++++ b/system/etc/init/netd.rc
+@@ -23,7 +23,7 @@
+     rlimit memlock 1073741824 1073741824
+     # sockets are only needed for the 'real' netd
+     socket dnsproxyd stream 0660 root inet
+-    socket oplus_dnsproxyd stream 0660 root inet
++    socket oplus_dnsproxyd stream 0660 root inet u:object_r:dnsproxyd_socket:s0
+     socket mdns stream 0660 root system
+     socket fwmarkd stream 0660 root inet
+     # netd is not updatable, but depends on libs provided by tethering apex.

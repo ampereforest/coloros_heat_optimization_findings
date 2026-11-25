@@ -25,18 +25,32 @@ on property:sys.boot_completed=1
     write /dev/cpuctl/top-app/cpu.uclamp.latency_sensitive 1
     write /dev/cpuctl/display/cpu.uclamp.latency_sensitive 1
     write /dev/cpuctl/rt/cpu.uclamp.latency_sensitive 1
-    write /dev/cpuctl/display/cpu.uclamp.min 1
+    write /dev/cpuctl/display/cpu.uclamp.min 2
 
 # Apply thermally balanced WALT governor, VM/kswapd, & RPS parameters after vendor post_boot finishes
 # (ZERO scaling_max_freq capping — full 3.53 GHz Medium and 4.32 GHz Prime remain 100% available)
 on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1
     write /sys/class/thermal/thermal_message/sconfig 0
+    write /dev/cpuctl/top-app/cpu.uclamp.latency_sensitive 1
+    write /dev/cpuctl/display/cpu.uclamp.latency_sensitive 1
+    write /dev/cpuctl/rt/cpu.uclamp.latency_sensitive 1
+    write /dev/cpuctl/display/cpu.uclamp.min 2
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/up_rate_limit_us 4000
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/down_rate_limit_us 0
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/up_rate_limit_us 4000
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/down_rate_limit_us 0
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/rtg_boost_freq 748800
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/rtg_boost_freq 1017600
     write /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_freq 960000
     write /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_freq 1209600
     write /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_load 92
     write /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_load 95
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/boost -15
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/boost -15
     write /sys/devices/system/cpu/cpufreq/policy0/walt/pl 0
     write /sys/devices/system/cpu/cpufreq/policy6/walt/pl 0
+    write /proc/sys/walt/sched_ed_boost 0
+    write /proc/sys/walt/sched_conservative_pl 1
     write /proc/sys/walt/sched_coloc_busy_hysteresis_enable_cpus 63
     write /proc/sys/walt/sched_util_busy_hysteresis_enable_cpus 63
     write /proc/sys/walt/sched_coloc_busy_hyst_cpu_ns "2000000 1000000 1000000 1000000 1000000 1000000 2000000 2000000"
@@ -44,11 +58,16 @@ on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1
     write /sys/devices/system/cpu/cpu0/core_ctl/not_preferred "1 1 0 0 0 0"
     write /sys/devices/system/cpu/cpu6/core_ctl/busy_up_thres "75 75"
     write /sys/devices/system/cpu/cpu6/core_ctl/busy_down_thres "40 40"
-    write /proc/sys/walt/input_boost_freq "748800 0 0 0 0 0 0 0"
-    write /proc/sys/walt/input_boost_ms 25
+    write /proc/sys/walt/input_boost/input_boost_freq "960000 0 0 0 0 0 0 0"
+    write /proc/sys/walt/input_boost/input_boost_ms 60
+    write /proc/sys/walt/input_boost/powerkey_input_boost_freq "1363200 0 0 0 0 0 1689600 0"
+    write /proc/sys/walt/input_boost/powerkey_input_boost_ms 200
+    write /proc/sys/walt/input_boost/powerkey_sched_boost_on_input 0
     # Stop kswapd0 thrashing when >6 GB RAM is available
     write /proc/sys/vm/swappiness 60
-    # Offload 5G rmnet_data* (was 3d with CPU0 bit set!), USB rndis0, and Wi-Fi/Hotspot wlan0/wlan2 to CPU2-5 (3c)
+    # Offload 5G rmnet_ipa0 (was rx-0=02 single CPU1, rx-1=00!) + rmnet_data*, USB rndis0, and Wi-Fi/Hotspot wlan0/wlan2 to CPU2-5 (3c)
+    write /sys/class/net/rmnet_ipa0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_ipa0/queues/rx-1/rps_cpus 3c
     write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
     write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
     write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
@@ -91,6 +110,26 @@ on property:vendor.usb.tethering=true
 
 on property:sys.user.0.ce_available=true
     write /sys/class/thermal/thermal_message/sconfig 0
+    write /dev/cpuctl/display/cpu.uclamp.min 2
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/up_rate_limit_us 4000
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/down_rate_limit_us 0
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/up_rate_limit_us 4000
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/down_rate_limit_us 0
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/rtg_boost_freq 748800
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/rtg_boost_freq 1017600
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_freq 960000
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_freq 1209600
+    write /sys/devices/system/cpu/cpufreq/policy0/walt/hispeed_load 92
+    write /sys/devices/system/cpu/cpufreq/policy6/walt/hispeed_load 95
+    write /proc/sys/walt/sched_ed_boost 0
+    write /proc/sys/walt/sched_conservative_pl 1
+    write /proc/sys/walt/input_boost/input_boost_freq "960000 0 0 0 0 0 0 0"
+    write /proc/sys/walt/input_boost/input_boost_ms 60
+    write /proc/sys/walt/input_boost/powerkey_input_boost_freq "1363200 0 0 0 0 0 1689600 0"
+    write /proc/sys/walt/input_boost/powerkey_input_boost_ms 200
+    write /proc/sys/walt/input_boost/powerkey_sched_boost_on_input 0
+    write /sys/class/net/rmnet_ipa0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_ipa0/queues/rx-1/rps_cpus 3c
     write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
     write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
     write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
@@ -156,6 +195,8 @@ on property:oplus.softap.sta.freq=*
     write /sys/class/net/wlan2/queues/rx-4/rps_cpus 3c
 
 on property:sys.oplus.wlan.sar_idx=*
+    write /sys/class/net/rmnet_ipa0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_ipa0/queues/rx-1/rps_cpus 3c
     write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
     write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
     write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
@@ -190,6 +231,14 @@ on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1 && proper
 on property:sys.boot_completed=1 && property:vendor.post_boot.parsed=1 && property:persist.sys.oplus.cpu_boost=0
     write /proc/sys/walt/cluster0/smart_freq/ipc_freq_levels "2400000 2400000 2700000 3000000 2147483647"
     write /proc/sys/walt/cluster1/smart_freq/ipc_freq_levels "3513600 3800000 4100000 4200000 2147483647"
+
+on property:persist.sys.midas_ostats.restriction=1
+    write /sys/class/net/rmnet_ipa0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_ipa0/queues/rx-1/rps_cpus 3c
+    write /sys/class/net/rmnet_data0/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data1/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data2/queues/rx-0/rps_cpus 3c
+    write /sys/class/net/rmnet_data3/queues/rx-0/rps_cpus 3c
 
 # Dirty-flash safety: ensure CWB stays enabled for Xiaomi 15 BOLED TCS3720 ALS/Proximity
 # (runs in PID 1 init domain -> 0 SELinux AVCs; recovers dirty flashes over v4 builds automatically)

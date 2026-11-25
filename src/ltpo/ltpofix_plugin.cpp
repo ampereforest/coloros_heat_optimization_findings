@@ -30,7 +30,7 @@ static int g_pipe_read_fd  = -1;
 static int g_pipe_write_fd = -1;
 static pthread_once_t g_watcher_once = PTHREAD_ONCE_INIT;
 
-static const NyakoRule kRules[3] = {
+static const NyakoRule kRules[4] = {
     {
         0,
         "com.android.server.display.mode.DisplayModeDirector",
@@ -52,6 +52,13 @@ static const NyakoRule kRules[3] = {
         "setDefaultDisplayState",
         "(Ljava/lang/Object;I)V",
     },
+    {
+        0,
+        "com.android.server.display.LocalDisplayAdapter$LocalDisplayDevice",
+        "com.nyako.ltpofix.LtpoFixHooks",
+        "setDesiredDisplayModeSpecsLocked",
+        "(Ljava/lang/Object;Lcom/android/server/display/mode/DisplayModeDirector$DesiredDisplayModeSpecs;)V",
+    },
 };
 
 static int matches_proc(const char* proc, const char* target) {
@@ -65,10 +72,8 @@ static int matches_proc(const char* proc, const char* target) {
 static void publish_pipe_fd_to_jvm(int read_fd) {
     char fd_str[24];
     snprintf(fd_str, sizeof(fd_str), "%d", read_fd);
-    // Primary zero-JNI handoff readable via android.system.Os.getenv() inside system_server
     setenv("NYAKO_LTPO_PIPE_FD", fd_str, 1);
 
-    // Secondary JVM System property handoff via /apex/com.android.art/lib64/libart.so
     using GetVMsFn = jint (*)(JavaVM**, jsize, jsize*);
     auto get_vms = reinterpret_cast<GetVMsFn>(dlsym(RTLD_DEFAULT, "JNI_GetCreatedJavaVMs"));
     if (!get_vms) {
@@ -120,8 +125,6 @@ static void publish_pipe_fd_to_jvm(int read_fd) {
     if (attached) vm->DetachCurrentThread();
 }
 
-// Kernel-futex zero-CPU watcher: 0.000% CPU, 0 wakeups/sec while static or screen-off!
-// Wakes Java LtpoFixHooks via internal anonymous pipe2() — zero System.load, zero Binder, zero AVCs.
 static void* sf_idle_futex_thread(void*) {
     __android_log_print(ANDROID_LOG_INFO, "NyakoLtpoFix",
                         "futex watcher active (pipe_r=%d pipe_w=%d)", g_pipe_read_fd, g_pipe_write_fd);
@@ -180,7 +183,7 @@ const char* nyako_plugin_get_name() {
 
 __attribute__((visibility("default")))
 int nyako_plugin_get_version() {
-    return 7;
+    return 8;
 }
 
 __attribute__((visibility("default")))
@@ -190,7 +193,7 @@ const char* nyako_plugin_get_scope() {
 
 __attribute__((visibility("default")))
 const char* nyako_plugin_get_desc() {
-    return "Zero-CPU hardware 1-120Hz LTPO with futex-pipe property wakeup";
+    return "Zero-CPU hardware 1-120Hz LTPO with synchronized DisplayModeSpecs range safety";
 }
 
 __attribute__((visibility("default")))
@@ -204,8 +207,8 @@ int nyako_plugin_entry(const char* proc_name) {
         return 1;
     }
     uint32_t dex_size = static_cast<uint32_t>(_binary_classes_dex_end - _binary_classes_dex_start);
-    __android_log_print(ANDROID_LOG_INFO, "NyakoLtpoFix", "install: %u rule(s) (dex=%uB)", 3u, dex_size);
-    int rc = nyako_install_dex_data(_binary_classes_dex_start, dex_size, kRules, 3u);
+    __android_log_print(ANDROID_LOG_INFO, "NyakoLtpoFix", "install: %u rule(s) (dex=%uB)", 4u, dex_size);
+    int rc = nyako_install_dex_data(_binary_classes_dex_start, dex_size, kRules, 4u);
     pthread_once(&g_watcher_once, start_futex_pipe_watcher);
     return rc;
 }

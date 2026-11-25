@@ -1,0 +1,42 @@
+# Patch: Guard QtiImsExtConnector.bindQtiImsExtService() Against Missing org.codeaurora.ims/.QtiImsExtService (v7.3.1)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /product/framework/ims-ext-common.jar -> classes.dex -> org/codeaurora/ims/QtiImsExtConnector.smali
+# Notes: Checks PackageManager.resolveService(intent, 0) == null before calling bindService() / scheduling 500ms retry loop. Eliminates 11,734 bind-storm hits/34m (~6-10 Binder IPCs/sec forever) and cuts clean-flash screen-off Asleep idle CPU from 3.1-3.3% -> 0.79% (-75%) while keeping native imsdaemon VoLTE/5G EN-DC/Dual-SIM/eSIM 100% intact.
+# Notes: After reassembling classes.dex (smali a -a 28) and repacking 4-byte aligned ZIP_STORED ims-ext-common.jar, remove the 6 stale product/framework/oat/{arm,arm64}/ims-ext-common.{odex,vdex,fsv_meta} files and sync packing/product/{fs_config,file_contexts}.
+# Apply: baksmali d product/framework/ims-ext-common.jar -o smali_out && patch -d smali_out -p1 < product_ims_ext_common_qti_connector.smali.patch
+#
+--- a/org/codeaurora/ims/QtiImsExtConnector.smali
++++ b/org/codeaurora/ims/QtiImsExtConnector.smali
+@@ -263,6 +263,32 @@
+ 
+     invoke-virtual {v2, v4, v5}, Landroid/content/Intent;->setClassName(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
+ 
++    iget-object v4, p0, Lorg/codeaurora/ims/QtiImsExtConnector;->mContext:Landroid/content/Context;
++
++    if-eqz v4, :cond_no_ims_ext_svc
++
++    invoke-virtual {v4}, Landroid/content/Context;->getPackageManager()Landroid/content/pm/PackageManager;
++
++    move-result-object v4
++
++    if-eqz v4, :cond_no_ims_ext_svc
++
++    const/4 v5, 0x0
++
++    invoke-virtual {v4, v2, v5}, Landroid/content/pm/PackageManager;->resolveService(Landroid/content/Intent;I)Landroid/content/pm/ResolveInfo;
++
++    move-result-object v4
++
++    if-nez v4, :cond_has_ims_ext_svc
++
++    :cond_no_ims_ext_svc
++    const/4 v4, 0x0
++
++    iput-boolean v4, p0, Lorg/codeaurora/ims/QtiImsExtConnector;->mBound:Z
++
++    return-void
++
++    :cond_has_ims_ext_svc
+     .line 123
+     iget-object v4, p0, Lorg/codeaurora/ims/QtiImsExtConnector;->mContext:Landroid/content/Context;
+ 

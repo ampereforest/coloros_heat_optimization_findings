@@ -1,0 +1,76 @@
+# Patch: Enable 4G LTE / LTE_CA / 5G NR Fast Dormancy (0x1AA708) in system_ext dpm.conf (v7.3)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system_ext/etc/dpm/dpm.conf
+# Notes: Mirrors 0x1AA708 (3G + LTE + LTE_CA + 5G NR) and 5s screen-on / 3s screen-off Fast Dormancy timers in system_ext/etc/dpm/dpm.conf.
+# Apply: patch -p1 < system_ext_dpm_fast_dormancy.patch
+#
+--- a/system_ext/etc/dpm/dpm.conf
++++ b/system_ext/etc/dpm/dpm.conf
+@@ -5,7 +5,7 @@
+ dpm_s0_fd_delay_time_timer_value:0
+ #Idle timer value when SCREEN state is ON
+ #dpm_fd_screen_on_idle_timer_value = actual_screen_on_timer + delay_time
+-dpm_s0_fd_screen_on_idle_timer_value:15
++dpm_s0_fd_screen_on_idle_timer_value:5
+ #Idle timer value when SCREEN state is OFF
+ #dpm_fd_screen_off_idle_timer_value = actual_screen_off_timer + delay_time
+ dpm_s0_fd_screen_off_idle_timer_value:3
+@@ -14,15 +14,15 @@
+ #dpm_tethering_on_idle_timer_value = actual_tethering_on_timer + delay_time
+ dpm_s0_fd_tethering_on_idle_timer_value:15
+ #FastDormancy can be configured for a network type
+-#Default configuration 101000011100001000
+-dpm_s0_fd_enable_networks_mask:0x28708
++#Enable 3G + LTE (bit 13) + LTE_CA (bit 19) + 5G NR (bit 20) = 0x1AA708
++dpm_s0_fd_enable_networks_mask:0x1AA708
+ 
+ #Configuration params for FD slot 1
+ #delay_time while issuing dormancy_request
+ dpm_s1_fd_delay_time_timer_value:0
+ #Idle timer value when SCREEN state is ON
+ #dpm_fd_screen_on_idle_timer_value = actual_screen_on_timer + delay_time
+-dpm_s1_fd_screen_on_idle_timer_value:15
++dpm_s1_fd_screen_on_idle_timer_value:5
+ #Idle timer value when SCREEN state is OFF
+ #dpm_fd_screen_off_idle_timer_value = actual_screen_off_timer + delay_time
+ dpm_s1_fd_screen_off_idle_timer_value:3
+@@ -31,8 +31,8 @@
+ #dpm_tethering_on_idle_timer_value = actual_tethering_on_timer + delay_time
+ dpm_s1_fd_tethering_on_idle_timer_value:15
+ #FastDormancy can be configured for a network type
+-#Default configuration 101000011100001000
+-dpm_s1_fd_enable_networks_mask:0x28708
++#Enable 3G + LTE (bit 13) + LTE_CA (bit 19) + 5G NR (bit 20) = 0x1AA708
++dpm_s1_fd_enable_networks_mask:0x1AA708
+ 
+ #Configuration params for TCM
+ #Idle timer value when SCREEN state is ON
+@@ -42,8 +42,8 @@
+ #min : 0s and max :256s, tcm is disabled with screen off state
+ dpm_tcm_screen_off_idle_timer_value:0
+ #TCM can be configured for a network type
+-#Default configuration 11111111111111111110
+-dpm_tcm_enable_networks_mask:0xFFFFE
++#Default configuration 111111111111111111110
++dpm_tcm_enable_networks_mask:0x1FFFFE
+ 
+ 
+ #FastDormancy and TCM can be configured for a network type
+@@ -66,13 +66,13 @@
+ #NETWORK_TYPE_GSM = 16
+ #NETWORK_TYPE_TD_SCDMA = 17
+ #NETWORK_TYPE_IWLAN = 18
+-#NETWORK_TYPE_LTE_CA = 19;
++#NETWORK_TYPE_LTE_CA = 19
++#NETWORK_TYPE_NR = 20;
+ 
+ #configuration params for Dormancy manager
+ #first larger inactivity soft timer to poll for dormancy in seconds.
+-dpm_dm_t1_inactivity_timer:15
++dpm_dm_t1_inactivity_timer:5
+ #second smaller inactivity soft timer to poll for dormancy in seconds.
+-dpm_dm_t2_inactivity_timer:5
++dpm_dm_t2_inactivity_timer:3
+ #number of times T2 can be repeated before registering for dormancy indication with modem directly.
+ dpm_dm_repeat_t2:5
+-

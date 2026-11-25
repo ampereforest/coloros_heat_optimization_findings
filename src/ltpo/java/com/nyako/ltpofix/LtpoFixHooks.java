@@ -18,21 +18,19 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
-/* Zero-Polling Event-Driven Xiaomi 15 (o3_42_0d_0a) Hardware LTPO Controller.
+/* Zero-Polling Event-Driven Xiaomi 15 (o3_42_0d_0a) Hardware LTPO Controller (v8).
  *
- * Replaces SnapshotReader (1MB memfd SurfaceFlinger dumps & 30MB GC churn) with pure
- * event-driven mode transitions driven by /system/lib64/overlay.so inside SurfaceFlinger:
- *   - sf_idle = 0  -> sfModeId=1 (group 0x2780100, auto_120_to_1hz, HW DDIC auto-LTPO active)
- *   - sf_idle = 10 -> sfModeId=2 (group 0x1780A00, idle_120_to_10hz, 10Hz intermediate step)
- *   - sf_idle = 1  -> sfModeId=3 (group 0x1780100, idle_120_to_1hz, 1Hz static idle / Doze)
- * Preserves PointerMonitor instant touch wake, PanelSafety HDR/HBM guard, native 90/60/40/30/24Hz
- * mode passthrough, and Show-Refresh-Rate overlay repaint ONLY when overlay is enabled.
+ * Strictly synchronizes DisplayModeDirector.DesiredDisplayModeSpecs ranges + vrrPolicy with
+ * LocalDisplayDevice.setDesiredDisplayModeSpecsLocked and findSfDisplayModeIdLocked so isolated
+ * 120 Hz LTPO groups (0x2780100 / 0x1780A00 / 0x1780100) are NEVER sent with narrowed 60 Hz or
+ * boundary-truncated 120.00 Hz FpsRanges.
  */
 public final class LtpoFixHooks {
     private static final String TAG = "NyakoLtpoFix";
     private static final int GROUP_AUTO_1  = 0x2780100;
     private static final int GROUP_IDLE_10 = 0x1780A00;
     private static final int GROUP_IDLE_1  = 0x1780100;
+    private static final float SAFE_LTPO_MAX_HZ = 120.1f;
 
     private static final String P_FORCE      = "persist.nyako.ltpo.force_mode";
     private static final String P_AUTO_IDLE  = "persist.nyako.ltpo.auto_idle";
@@ -63,9 +61,19 @@ public final class LtpoFixHooks {
     static volatile boolean sTouchActive;
     private static volatile long sLastTouchMs;
     private static volatile int sIdleLevel; // 0 = active, 10 = idle10, 1 = idle1
+    private static volatile int sDirectorDisplayState = 2;
     private static volatile boolean sPanelAllowed;
     private static volatile boolean sPointerReady;
     private static String sLastMapping;
+
+    private static final Runnable WAKE_RESYNC_RUNNABLE = new Runnable() {
+        @Override
+        public void run() {
+            if (sDirectorDisplayState == 2) {
+                triggerDirectorNotify();
+            }
+        }
+    };
 
     private static final Runnable TOUCH_END_RUNNABLE = new Runnable() {
         @Override
@@ -92,7 +100,6 @@ public final class LtpoFixHooks {
 
     private LtpoFixHooks() {}
 
-    // --- SystemProperties reflection helpers (avoids hidden API compile stubs) ---
     private static int syspropInt(String key, int def) {
         try {
             Class<?> sp = Class.forName("android.os.SystemProperties");
@@ -122,7 +129,6 @@ public final class LtpoFixHooks {
         }
     }
 
-    // --- Reflection helpers ---
     private static Field findField(Class<?> cls, String name) throws NoSuchFieldException {
         while (cls != null) {
             try {
@@ -213,27 +219,83 @@ public final class LtpoFixHooks {
         return !Float.isNaN(rate) && rate >= (min - 0.01f) && rate <= (max + 0.01f);
     }
 
-    private static void widenSpecsMax(DisplayModeDirector.DesiredDisplayModeSpecs specs, float rate) {
+    private static boolean rangeNeedsWidening(Object range, float targetMax, boolean clampMinZero) throws Exception {
+        if (range == null) return false;
+        Field fMin = findField(range.getClass(), "min");
+        Field fMax = findField(range.getClass(), "max");
+        float min = fMin.getFloat(range);
+        float max = fMax.getFloat(range);
+        if (max < targetMax - 0.02f) return true;
+        if (clampMinZero && min > 0.0f) return true;
+        if (min > 119.9f) return true;
+        return false;
+    }
+
+    private static boolean specsNeedWidening(DisplayModeDirector.DesiredDisplayModeSpecs specs, float rate, boolean clampMinZero) {
         try {
+            float targetMax = Math.max(rate, SAFE_LTPO_MAX_HZ);
             Object primary = field(specs, "primary");
             if (primary != null) {
-                widenRangeMax(field(primary, "physical"), rate);
-                widenRangeMax(field(primary, "render"), rate);
+                if (rangeNeedsWidening(field(primary, "physical"), targetMax, clampMinZero)) return true;
+                if (rangeNeedsWidening(field(primary, "render"), targetMax, clampMinZero)) return true;
             }
             Object appReq = field(specs, "appRequest");
             if (appReq != null) {
-                widenRangeMax(field(appReq, "physical"), rate);
-                widenRangeMax(field(appReq, "render"), rate);
+                if (rangeNeedsWidening(field(appReq, "physical"), targetMax, clampMinZero)) return true;
+                if (rangeNeedsWidening(field(appReq, "render"), targetMax, clampMinZero)) return true;
             }
         } catch (Throwable ignored) {}
+        return false;
     }
 
-    private static void widenRangeMax(Object range, float rate) throws Exception {
-        if (range == null) return;
-        Field fMax = findField(range.getClass(), "max");
-        if (fMax.getFloat(range) < rate) {
-            fMax.setFloat(range, rate);
+    private static boolean widenSpecsMax(DisplayModeDirector.DesiredDisplayModeSpecs specs, float rate, boolean clampMinZero) {
+        try {
+            float targetMax = Math.max(rate, SAFE_LTPO_MAX_HZ);
+            Object primary = field(specs, "primary");
+            if (primary != null) {
+                widenRange(field(primary, "physical"), targetMax, clampMinZero);
+                widenRange(field(primary, "render"), targetMax, clampMinZero);
+            }
+            Object appReq = field(specs, "appRequest");
+            if (appReq != null) {
+                widenRange(field(appReq, "physical"), targetMax, clampMinZero);
+                widenRange(field(appReq, "render"), targetMax, clampMinZero);
+            }
+            syncVrrPolicy(specs, targetMax);
+            return true;
+        } catch (Throwable t) {
+            Log.w(TAG, "widenSpecsMax failed: " + t);
+            return false;
         }
+    }
+
+    private static void widenRange(Object range, float targetMax, boolean clampMinZero) throws Exception {
+        if (range == null) return;
+        Field fMin = findField(range.getClass(), "min");
+        Field fMax = findField(range.getClass(), "max");
+        float min = fMin.getFloat(range);
+        if (clampMinZero && min > 0.0f) {
+            fMin.setFloat(range, 0.0f);
+        } else if (min > 119.9f) {
+            fMin.setFloat(range, 0.0f);
+        }
+        if (fMax.getFloat(range) < targetMax) {
+            fMax.setFloat(range, targetMax);
+        }
+    }
+
+    private static void syncVrrPolicy(DisplayModeDirector.DesiredDisplayModeSpecs specs, float renderMax) {
+        try {
+            Field fExt = findField(DisplayModeDirector.class, "mDmdExt");
+            Object ext = fExt.get(null);
+            if (ext != null) {
+                Method mGet = ext.getClass().getMethod("getVrrPolicy", float.class);
+                mGet.setAccessible(true);
+                int policy = ((Integer) mGet.invoke(ext, renderMax)).intValue();
+                Field fVrr = findField(specs.getClass(), "vrrPolicy");
+                fVrr.setInt(specs, policy);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void disableLightSensorAlwaysOn() {
@@ -428,7 +490,7 @@ public final class LtpoFixHooks {
         Handler h = sHandler;
         if (h != null) {
             h.removeCallbacks(TOUCH_END_RUNNABLE);
-            h.postDelayed(TOUCH_END_RUNNABLE, 200L);
+            h.postDelayed(TOUCH_END_RUNNABLE, 320L);
         }
         if (prevIdle != 0) {
             triggerDirectorNotify();
@@ -436,7 +498,7 @@ public final class LtpoFixHooks {
     }
 
     private static void onTouchIdleTimeout() {
-        if (SystemClock.uptimeMillis() - sLastTouchMs >= 180L && sTouchActive) {
+        if (SystemClock.uptimeMillis() - sLastTouchMs >= 300L && sTouchActive) {
             sTouchActive = false;
             applyCurrentIdleState();
         }
@@ -576,6 +638,7 @@ public final class LtpoFixHooks {
             return specs;
         }
         boolean isolated;
+        int state = 2;
         Display.Mode target;
         Object lock = field(director, "mLock");
         synchronized (lock) {
@@ -597,7 +660,7 @@ public final class LtpoFixHooks {
             isolated = isIsolatedVariant(modes, target);
             if (isolated) {
                 Object bo = field(director, "mBrightnessObserver");
-                int state = ((Integer) field(bo, "mDefaultDisplayState")).intValue();
+                state = ((Integer) field(bo, "mDefaultDisplayState")).intValue();
                 if (state != 3 && state != 4) {
                     if (state != 2) return specs;
                     if (!sameRate(orig.getRefreshRate(), target.getRefreshRate())
@@ -613,23 +676,22 @@ public final class LtpoFixHooks {
                 || !physicalRangeContains(field(specs, "appRequest"), target.getRefreshRate())) {
                 return specs;
             }
-        } else {
-            // Respect user's explicit 60Hz cap if primary physical max < 120Hz (unless DOZE or idle override)
-            if (!physicalRangeContains(field(specs, "primary"), target.getRefreshRate())
-                && !shouldOverrideLowRateToLtpo(target)) {
-                // Keep original logic: allow LTPO mode when 60Hz overridden by active/idle LTPO
-            }
         }
 
+        boolean clampMinZero = (state == 3 || state == 4 || sIdleLevel != 0);
         boolean allowGrp = !isolated && (syspropInt(P_ALLOW, 0) == 1 || specs.allowGroupSwitching);
-        if (specs.baseModeId == target.getModeId() && specs.allowGroupSwitching == allowGrp) {
+        if (specs.baseModeId == target.getModeId()
+            && specs.allowGroupSwitching == allowGrp
+            && !specsNeedWidening(specs, target.getRefreshRate(), clampMinZero)) {
             return specs;
         }
         DisplayModeDirector.DesiredDisplayModeSpecs out = new DisplayModeDirector.DesiredDisplayModeSpecs();
         out.copyFrom(specs);
         out.baseModeId = target.getModeId();
         out.allowGroupSwitching = allowGrp;
-        widenSpecsMax(out, target.getRefreshRate());
+        if (!widenSpecsMax(out, target.getRefreshRate(), clampMinZero)) {
+            return specs;
+        }
         return out;
     }
 
@@ -651,9 +713,9 @@ public final class LtpoFixHooks {
     }
 
     // === HOOK 1: LocalDisplayAdapter$LocalDisplayDevice.findSfDisplayModeIdLocked(int, int) ===
-    public static int findSfDisplayModeIdLocked(Object self, int displayModeId, int defaultModeId) {
+    public static int findSfDisplayModeIdLocked(Object self, int displayModeId, int defaultModeGroup) {
         int origSfId = ((Integer) NyakoBridge.invokeOriginal(
-            1, self, new Object[] { displayModeId, defaultModeId })).intValue();
+            1, self, new Object[] { displayModeId, defaultModeGroup })).intValue();
         try {
             if (!((Boolean) field(self, "mIsFirstDisplay")).booleanValue()) {
                 return origSfId;
@@ -662,23 +724,19 @@ public final class LtpoFixHooks {
                 sDevice = new WeakReference<Object>(self);
             }
             int forceMode = syspropInt(P_FORCE, 0);
-            if (forceMode <= 0) return origSfId;
+            // Strictly map ONLY when displayModeId was already promoted + widened to forceMode;
+            // never remap a 60 Hz / group-0 displayModeId behind DesiredDisplayModeSpecs's back!
+            if (forceMode <= 0 || displayModeId != forceMode) {
+                return origSfId;
+            }
 
             int state = ((Integer) field(self, "mState")).intValue();
-            int effModeId = displayModeId;
-            if (state == 3 || state == 4) {
-                effModeId = forceMode;
-            } else if (state == 2 && displayModeId == 4 && sIdleLevel != 0) {
-                effModeId = forceMode;
-            }
-            if (effModeId != forceMode) return origSfId;
-
             @SuppressWarnings("unchecked")
             SparseArray<Object> supported = (SparseArray<Object>) field(self, "mSupportedModes");
-            Object record = supported.get(effModeId);
+            Object record = supported.get(displayModeId);
             if (record == null) return origSfId;
             Display.Mode dm = (Display.Mode) field(record, "mMode");
-            if (dm.getModeId() != effModeId) return origSfId;
+            if (dm.getModeId() != displayModeId) return origSfId;
             int sfId = ((Integer) Display.Mode.class.getMethod("getSfModeId").invoke(dm)).intValue();
             if (sfId < 0) return origSfId;
 
@@ -687,9 +745,11 @@ public final class LtpoFixHooks {
                 int id = ((Integer) field(sfMode, "id")).intValue();
                 if (id == sfId && matchesSfMode(dm, sfMode)) {
                     int wantGroup = 0;
-                    if (state == 3 || state == 4 || syspropInt(P_IDLE_TEST, 0) == 1) {
+                    boolean dozing = (state == 3 || state == 4) && (sDirectorDisplayState != 2);
+                    if (dozing || syspropInt(P_IDLE_TEST, 0) == 1) {
                         wantGroup = GROUP_IDLE_1;
-                    } else if (state == 2 && syspropInt(P_AUTO_IDLE, 0) == 1
+                    } else if ((state == 2 || sDirectorDisplayState == 2)
+                               && syspropInt(P_AUTO_IDLE, 0) == 1
                                && !sTouchActive && sPanelAllowed && sPointerReady) {
                         if (sIdleLevel == 1) {
                             wantGroup = GROUP_IDLE_1;
@@ -709,7 +769,7 @@ public final class LtpoFixHooks {
                         }
                     }
 
-                    String msg = "MAP DM " + effModeId + ": SF " + origSfId + " -> " + sfId;
+                    String msg = "MAP DM " + displayModeId + ": SF " + origSfId + " -> " + sfId;
                     synchronized (STATE_LOCK) {
                         if (!msg.equals(sLastMapping)) {
                             log(msg);
@@ -732,13 +792,78 @@ public final class LtpoFixHooks {
         try {
             prev = ((Integer) field(self, "mDefaultDisplayState")).intValue();
         } catch (Throwable ignored) {}
+        sDirectorDisplayState = state;
         NyakoBridge.invokeOriginal(2, self, new Object[] { state });
         if (prev >= 0 && prev != state) {
-            if (state != 2) {
+            Handler h;
+            synchronized (STATE_LOCK) {
+                h = sHandler;
+            }
+            if (state == 2) {
+                sIdleLevel = 0;
+                sTouchActive = true;
+                sLastTouchMs = SystemClock.uptimeMillis();
+                if (h != null) {
+                    h.removeCallbacks(WAKE_RESYNC_RUNNABLE);
+                    h.postDelayed(WAKE_RESYNC_RUNNABLE, 120L);
+                    h.postDelayed(WAKE_RESYNC_RUNNABLE, 320L);
+                    h.removeCallbacks(TOUCH_END_RUNNABLE);
+                    h.postDelayed(TOUCH_END_RUNNABLE, 500L);
+                }
+            } else {
                 sIdleLevel = 0;
                 sTouchActive = false;
+                if (h != null) {
+                    h.removeCallbacks(WAKE_RESYNC_RUNNABLE);
+                }
             }
             triggerDirectorNotify();
         }
+    }
+
+    // === HOOK 3: LocalDisplayAdapter$LocalDisplayDevice.setDesiredDisplayModeSpecsLocked(DesiredDisplayModeSpecs) ===
+    public static void setDesiredDisplayModeSpecsLocked(
+            Object self, DisplayModeDirector.DesiredDisplayModeSpecs specs) {
+        DisplayModeDirector.DesiredDisplayModeSpecs effective = specs;
+        try {
+            if (specs != null && specs.baseModeId > 0
+                && ((Boolean) field(self, "mIsFirstDisplay")).booleanValue()) {
+                synchronized (STATE_LOCK) {
+                    sDevice = new WeakReference<Object>(self);
+                }
+                int forceMode = syspropInt(P_FORCE, 0);
+                if (forceMode > 0) {
+                    int state = ((Integer) field(self, "mState")).intValue();
+                    @SuppressWarnings("unchecked")
+                    SparseArray<Object> supported = (SparseArray<Object>) field(self, "mSupportedModes");
+                    Object targetRec = supported.get(forceMode);
+                    Object curRec = supported.get(specs.baseModeId);
+                    if (targetRec != null && curRec != null) {
+                        Display.Mode targetDm = (Display.Mode) field(targetRec, "mMode");
+                        Display.Mode curDm = (Display.Mode) field(curRec, "mMode");
+                        if (targetDm != null && curDm != null && sameSize(curDm, targetDm)) {
+                            boolean wantForce = (specs.baseModeId == forceMode)
+                                || (state == 3 || state == 4)
+                                || (state == 2 && shouldOverrideLowRateToLtpo(curDm));
+                            if (wantForce) {
+                                boolean clampMinZero = (state == 3 || state == 4 || sIdleLevel != 0);
+                                DisplayModeDirector.DesiredDisplayModeSpecs copy =
+                                    new DisplayModeDirector.DesiredDisplayModeSpecs();
+                                copy.copyFrom(specs);
+                                copy.baseModeId = forceMode;
+                                copy.allowGroupSwitching = false;
+                                if (widenSpecsMax(copy, targetDm.getRefreshRate(), clampMinZero)) {
+                                    effective = copy;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "setDesiredDisplayModeSpecsLocked guard failed: " + t);
+            effective = specs;
+        }
+        NyakoBridge.invokeOriginal(3, self, new Object[] { effective });
     }
 }

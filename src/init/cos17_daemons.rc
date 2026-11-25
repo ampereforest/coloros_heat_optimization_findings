@@ -49,7 +49,7 @@ on property:persist.sys.oplus.disable_mem_killer=1
 
 on property:persist.sys.oplus.disable_mem_killer=0
     write /proc/sys/vm/min_free_kbytes 11584
-    write /proc/sys/vm/swappiness 100
+    write /proc/sys/vm/swappiness 60
     write /proc/sys/vm/vfs_cache_pressure 100
     start vendor.cos17_memkiller
 

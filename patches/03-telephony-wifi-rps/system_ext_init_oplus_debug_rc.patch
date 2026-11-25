@@ -1,0 +1,59 @@
+# Patch: Neutralize 30s binderinfocapture / catSuspendMode Spawns & Add Core-Init Radio Dirty-Flash Resets (v7.3)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system_ext/etc/init/init.oplus.debug.rc
+# Notes: Replaces every-30s autochmod.sh binderinfocapture & catSuspendMode services with /system/bin/true (removing debug.binderinfo.capture trigger) and sets persist.oplus.radio.not_support_nsa_hw_ver=-1, not_support_nsa_show_5g=0, global_regionlock.allcheck=false, and default_sa=false from core init (u:r:init:s0, 0 Treble AVCs).
+# Apply: patch -p1 < system_ext_init_oplus_debug_rc.patch
+#
+--- a/system_ext/etc/init/init.oplus.debug.rc
++++ b/system_ext/etc/init/init.oplus.debug.rc
+@@ -403,7 +403,7 @@
+     disabled
+     oneshot
+ 
+-service catSuspendMode /system/system_ext/bin/autochmod.sh "catSuspendMode"
++service catSuspendMode /system/bin/true
+     class core
+     user root
+     group root system
+@@ -705,6 +705,11 @@
+     oneshot
+ 
+ on post-fs-data
++    # Core-init early dirty-flash reset before com.android.phone starts (u:r:init:s0 -> 0 Treble AVCs)
++    setprop persist.oplus.radio.not_support_nsa_hw_ver -1
++    setprop persist.oplus.radio.not_support_nsa_show_5g 0
++    setprop persist.sys.radio.global_regionlock.allcheck false
++    setprop persist.sys.oplus.radio.default_sa false
+     mkdir /data/ramdump 770 system system
+     mkdir /dev/log  0775 system system
+ 
+@@ -1170,6 +1175,11 @@
+ #endif /* OPLUS_FEATURE_PHOENIX */
+ 
+ on property:sys.boot_completed=1
++    # Core-init dirty-flash reset for CN NSA/SA/RegionLock radio props (u:r:init:s0 -> 0 Treble AVCs)
++    setprop persist.oplus.radio.not_support_nsa_hw_ver -1
++    setprop persist.oplus.radio.not_support_nsa_show_5g 0
++    setprop persist.sys.radio.global_regionlock.allcheck false
++    setprop persist.sys.oplus.radio.default_sa false
+ #ifdef OPLUS_FEATURE_SHUTDOWN_DETECT
+ #Liang.Zhang@TECH.BSP.Stability.OPLUS_SHUTDOWN_DETECT, 2019/04/28, Add for shutdown detect
+     setprop sys.oplus.shutdown.prepare_log boot_success
+@@ -1280,16 +1290,13 @@
+ 
+ #ifdef OPLUS_BUG_STABILITY
+ #Qing.Wu@ANDROID.STABILITY.2278668, 2019/09/03, Add for capture binder info
+-service binderinfocapture /system/system_ext/bin/autochmod.sh "binderinfocapture"
++service binderinfocapture /system/bin/true
+     class core
+     user root
+     group system root shell
+     seclabel u:r:dumpstate:s0
+     disabled
+     oneshot
+-
+-on property:debug.binderinfo.capture=true
+-    start binderinfocapture
+ #endif /* OPLUS_BUG_STABILITY */
+ 
+ #ifdef OPLUS_FEATURE_THEIA

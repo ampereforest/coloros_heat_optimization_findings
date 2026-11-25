@@ -1,0 +1,14 @@
+# Patch: Remove cn.google.services Feature from my_product GMS Permissions (v7.3)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /my_product/etc/permissions/oplus_google_cn_gms_features.xml
+# Notes: Removes cn.google.services (which forces GmsCore into China-mainland restricted FCM mode) while preserving com.google.android.feature.services_updater and leaving oplus.feature.control_cn_gms.xml intact so the Settings GMS toggle continues working.
+# Apply: patch -p1 < my_product_cn_gms_features.patch
+#
+--- a/my_product/etc/permissions/oplus_google_cn_gms_features.xml
++++ b/my_product/etc/permissions/oplus_google_cn_gms_features.xml
+@@ -1,5 +1,4 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <permissions>
+-    <feature name="cn.google.services" />
+     <feature name="com.google.android.feature.services_updater" />
+ </permissions>

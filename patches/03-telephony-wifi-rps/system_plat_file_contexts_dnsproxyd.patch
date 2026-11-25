@@ -1,0 +1,16 @@
+# Patch: Add /dev/socket/oplus_dnsproxyd Context to plat_file_contexts (v7.3)
+# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
+# Target Path: /system/etc/selinux/plat_file_contexts
+# Notes: Pairs with system_netd_oplus_dnsproxyd.patch so restorecon / init consistently label /dev/socket/oplus_dnsproxyd as u:object_r:dnsproxyd_socket:s0 (0 GMS DNS AVCs, NEW_PAIRS=0).
+# Apply: patch -p1 < system_plat_file_contexts_dnsproxyd.patch
+#
+--- a/system/etc/selinux/plat_file_contexts
++++ b/system/etc/selinux/plat_file_contexts
+@@ -116,6 +116,7 @@
+ /dev/socket/aconfigd_mainline	u:object_r:aconfigd_mainline_socket:s0
+ /dev/socket/aconfigd_system	u:object_r:aconfigd_socket:s0
+ /dev/socket/dnsproxyd	u:object_r:dnsproxyd_socket:s0
++/dev/socket/oplus_dnsproxyd	u:object_r:dnsproxyd_socket:s0
+ /dev/socket/dumpstate	u:object_r:dumpstate_socket:s0
+ /dev/socket/fwmarkd	u:object_r:fwmarkd_socket:s0
+ /dev/socket/lmkd        u:object_r:lmkd_socket:s0
