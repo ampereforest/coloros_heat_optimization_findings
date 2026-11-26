@@ -1,9 +1,5 @@
-# Patch: Rootless System-Domain Thermal, Radio & Telemetry Property Hygiene
-# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
-# Target Path: /system/build.prop
-# Notes: Sets midas_ostats restriction, QSPA modem disable, Wi-Fi fulldump off, and stability iostat/fault_report off in system partition (avoiding vendor_init SELinux denials), and removes qemu props.
-# Apply: patch -p1 < system_build_prop_hygiene.patch
-#
+# Patch: Strip qemu.* props (Duck Virtualization Clear) & add COS17 v7.2+ rootless system hygiene defaults
+# Target: /system/build.prop
 --- a/system/build.prop
 +++ b/system/build.prop
 @@ -186,8 +186,6 @@
@@ -15,10 +11,10 @@
  #Expose aux camera for below packages
  vendor.camera.aux.packagelist=android,com.oneplus.camera,com.oppo.camera,com.oplus.engineercamera,com.oplus.camera
  #Whitelist below package in privapp
-@@ -304,3 +302,12 @@
- ro.build.backported_fixes.alias_bitset.long_list=114
- # end of file
- ro.oplus.image.system.version=.596cf9b2
+@@ -313,3 +311,12 @@
+ import /my_product/build.prop
+ import /my_region/build.prop
+ import /my_stock/build.prop
 +# --- BEGIN COS17 V7.2 ROOTLESS SYSTEM HYGIENE DEFAULTS ---
 +persist.sys.midas_ostats.restriction=1
 +persist.oplus.qspa.modem=disabled

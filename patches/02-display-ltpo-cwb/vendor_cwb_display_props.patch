@@ -1,26 +1,22 @@
-# Patch: CWB 1000ms Frame Throttle & Zero-Polling LTPO/HDR Display Properties
-# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
-# Target Path: /vendor/build.prop
-# Notes: Sets ro.vendor.cwb.timeout=1000 (-79.5% CWB triggers during 4K60 video/scrolling, 0% screen-off leak) plus adaptive HDR2 and zero-polling LTPO defaults.
-# Apply: patch -p1 < vendor_cwb_display_props.patch
-#
+# Patch: Standalone CWB 1000ms throttle & HDR10 GPU target off (already included inside patches/04-memory-vm-props/vendor_build_prop_thermal_hygiene.patch)
+# Target: /vendor/build.prop
 --- a/vendor/build.prop
 +++ b/vendor/build.prop
-@@ -368,3 +368,17 @@
- ro.camerax.extensions.enabled=true
- # end of file
+@@ -293,7 +293,7 @@
+ vendor.display.disable_sdr_dimming=0
+ vendor.display.enable_rc_support=1
+ vendor.display.disable_sdr_histogram=1
+-vendor.display.enable_hdr10_gpu_target=1
++vendor.display.enable_hdr10_gpu_target=0
+ debug.sf.predict_hwc_composition_strategy=0
+ debug.sf.treat_170m_as_sRGB=1
+ vendor.display.disable_system_load_check=1
+@@ -379,3 +379,8 @@
+ ro.vendor.oplus.camera.frontCamSize=32MP
  
-+
-+# --- BEGIN COS17 DISPLAY / LTPO / CWB EFFICIENCY ---
-+ro.vendor.display.adaptive_hdr2.enable=true
-+vendor.display.hdr.Brighten_support=1
-+debug.sf.md_degrade_hdr=false
-+debug.sf.connected_display_hdr_v2=true
-+persist.nyako.ltpo.force_mode=2
-+persist.nyako.ltpo.auto_idle=1
-+persist.nyako.ltpo.content_overlay=0
-+persist.nyako.ltpo.log=0
+ persist.sys.oplus.nandswap.condition=true
++# --- BEGIN COS17 V5 CWB THROTTLE ---
 +# Throttle continuous-frame CWB triggers in libclient2slpi.notifier.so from 200ms (5Hz) -> 1000ms (1Hz)
 +# during video/scrolling while keeping instant 150ms misForced=1 CWB on wake/settle and 100% ALS/Prox accuracy.
 +ro.vendor.cwb.timeout=1000
-+# --- END COS17 DISPLAY / LTPO / CWB EFFICIENCY ---
++# --- END COS17 V5 CWB THROTTLE ---

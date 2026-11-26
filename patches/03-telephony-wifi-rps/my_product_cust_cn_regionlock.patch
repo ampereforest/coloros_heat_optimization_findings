@@ -1,14 +1,14 @@
-# Patch: Disable CN Global RegionLock Check in my_product/cust/CN/build.prop (v7.3)
-# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
-# Target Path: /my_product/cust/CN/build.prop
-# Notes: Sets ro.oplus.radio.global_regionlock.enabled=false to eliminate background CN region-lock RIL polling overhead.
-# Apply: patch -p1 < my_product_cust_cn_regionlock.patch
-#
+# Patch: Disable CN global regionlock checks & logging
+# Target: /my_product/cust/CN/build.prop
 --- a/my_product/cust/CN/build.prop
 +++ b/my_product/cust/CN/build.prop
-@@ -2,5 +2,5 @@
- ro.oplus.radio.global_regionlock.log=false
- ro.oplus.radio.global_regionlockflag=0
+@@ -1,6 +1,6 @@
+-ro.oplus.radio.global_regionlockupgrade=true
+-ro.oplus.radio.global_regionlock.log=true
+-ro.oplus.radio.global_regionlockflag=6
++ro.oplus.radio.global_regionlockupgrade=false
++ro.oplus.radio.global_regionlock.log=false
++ro.oplus.radio.global_regionlockflag=0
  ro.oplus.radio.global_regionlock.cert=1661243744237,CN
 -ro.oplus.radio.global_regionlock.enabled=true
 +ro.oplus.radio.global_regionlock.enabled=false

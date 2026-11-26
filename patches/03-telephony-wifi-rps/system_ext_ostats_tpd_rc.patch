@@ -1,0 +1,37 @@
+# Patch: Keep ostats_tpd stopped regardless of runtime triggers
+# Target: /system_ext/etc/init/ostats_tpd.rc
+--- a/system_ext/etc/init/ostats_tpd.rc
++++ b/system_ext/etc/init/ostats_tpd.rc
+@@ -1,16 +1,16 @@
+-service ostats_tpd /system_ext/bin/ostats_tpd
+-    user system
+-    group root system readtracefs media_rw
+-    disabled
+-
+-on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.enable=0
+-    stop ostats_tpd
+-
+-on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.start=0
+-    stop ostats_tpd
+-
+-on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.enable=1
+-    start ostats_tpd
+-
+-on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.start=1
+-    start ostats_tpd
++service ostats_tpd /system_ext/bin/ostats_tpd
++    user system
++    group root system readtracefs media_rw
++    disabled
++
++on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.enable=0
++    stop ostats_tpd
++
++on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.start=0
++    stop ostats_tpd
++
++on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.enable=1
++    stop ostats_tpd
++
++on property:sys.boot_completed=1 && property:persist.sys.ostats_tpd.start=1
++    stop ostats_tpd

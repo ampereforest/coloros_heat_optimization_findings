@@ -1,49 +1,95 @@
-;; ============================================================================
-;; Surgical SELinux CIL Policy Snippet for Rootless ColorOS 17 Thermal Helpers
-;; ============================================================================
-;; Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base)
-;;                   ported to Xiaomi 15 (dada, SM8750)
-;; Target Files:
-;;   /system/etc/selinux/plat_sepolicy.cil
-;;   /system_ext/etc/selinux/plat_sepolicy_debug.cil (keep byte-identical)
-;;   (Recompute SHA-256 into /system/etc/selinux/plat_sepolicy_and_mapping.sha256)
-;;
-;; Verification Gate (MUST pass before flashing):
-;;   secilc-upstream -N -> NEW_PAIRS=0, ZERO neverallow violations,
-;;   ZERO DirtySepolicy rules (never allow system_server execmem,
-;;   zygote/kernel adb_data_file, rootfs/kernel tmpfs, dex2oat execute_no_trans).
-;; ============================================================================
+;; Complete v7.3.1 platform SELinux CIL additions for ColorOS 17 thermal/HDR/LTPO/memkiller/xtouch helpers
+;; (Excludes eSIM n3_route rules, which live in ampereforest/dada_esim_compat)
+;; Merge into /system/etc/selinux/plat_sepolicy.cil and /system_ext/etc/selinux/plat_sepolicy_debug.cil,
+;; validate with secilc -N (NEW_PAIRS=0), and update plat_sepolicy_and_mapping*.sha256.
 
-;; 1. Neverallow exemption required for system_server/cos17_memkiller domain
-;;    (update the existing base_typeattr for property/service checks on PLZ110):
-;;    (typeattributeset base_typeattr_1063 (and (domain ) (not (flags_health_check init system_server cos17_memkiller ))))
+(typeattributeset base_typeattr_1063 (and (domain ) (not (flags_health_check init system_server cos17_memkiller ))))
 
-;; 2. Event-driven hdrpeak domain (/vendor/bin/hdrpeakd, uid=1000)
+; Permanent ROM local draft; merge into consumed platform CIL, not a policy proof.
+; No ksu, shell-data launcher lock, app_process or servicemanager dependency.
+;; ==========================================================================
+;; hdrpeak: Adaptive-HDR peak-brightness + LTPO bring-up daemon
+;; Permanent, unrooted replacement for the KernelSU post-fs-data/service.sh
+;; staging and for `ksud sepolicy apply sepolicy.rule`.
+;; Appended to system/etc/selinux/plat_sepolicy.cil and mirrored byte-for-byte
+;; into system_ext/etc/selinux/plat_sepolicy_debug.cil.
+;; Re-pin system/etc/selinux/plat_sepolicy_and_mapping.sha256 afterwards.
+;; --------------------------------------------------------------------------
+;; hdrpeak.sh is launched by init as:
+;;   /system/bin/sh /vendor/bin/hdrpeak.sh   (vendor/etc/init/hdrpeak.rc)
+;; It shells out to toybox, log, dumpsys, getprop, setprop, vndservice,
+;; reads  /sys/class/backlight/panel0-backlight/{brightness,bl_power},
+;; reads+writes /sys/class/mi_display/disp-DSI-0/disp_param
+;; and stops vendor.hdrblfollow exactly once (retirement, never restarted).
+;; ==========================================================================
 (type hdrpeak)
 (type hdrpeak_exec)
 (roletype object_r hdrpeak_exec)
 (typeattributeset domain (hdrpeak))
 (typeattributeset file_type (hdrpeak_exec))
 
+;; ---- init -> hdrpeak (explicit init_daemon_domain form) ------------------
 (allow init hdrpeak_exec (file (read getattr map execute open)))
 (allow init hdrpeak (process (transition noatsecure siginh rlimitinh)))
 (typetransition init hdrpeak_exec process hdrpeak)
 
-(allow hdrpeak hdrpeak_exec (file (entrypoint read open getattr map execute)))
+;; ---- entrypoint and the interpreter -------------------------------------
+;; init execs /system/bin/sh under seclabel u:r:hdrpeak:s0, then sh opens the
+;; script (read-only, it is never exec'd a second time).
+(allow hdrpeak shell_exec (file (entrypoint read open getattr map execute)))
+(allow hdrpeak hdrpeak_exec (file (read open getattr map)))
+
+;; ---- toybox applets: cat echo getprop grep log sed setprop sleep sort tail tr
+(allow hdrpeak toolbox_exec (file (read open getattr map execute execute_no_trans)))
+(allow hdrpeak system_file (file (read open getattr map execute execute_no_trans)))
+;; /system/bin/<applet> are symlinks into toybox; following them needs lnk read
+(allow hdrpeak system_file (lnk_file (read getattr)))
+(allow hdrpeak shell_exec (lnk_file (read getattr)))
+(allow hdrpeak toolbox_exec (lnk_file (read getattr)))
+(allow hdrpeak vendor_file (lnk_file (read getattr)))
+;; dynamic linker for /system/bin/sh and for every applet it execs
 (allow hdrpeak system_lib_file (file (read open getattr map)))
 (allow hdrpeak system_bootstrap_lib_file (file (read open getattr map)))
 (allow hdrpeak system_linker_exec (file (read open getattr map execute)))
 (allow hdrpeak system_linker_config_file (file (read open getattr map)))
+
+;; ---- process / fd basics ------------------------------------------------
 (allow hdrpeak self (process (fork sigchld getpgid getsched)))
+(allow hdrpeak self (capability (dac_override)))
 (allow hdrpeak self (fd (use)))
+(allow hdrpeak hdrpeak (dir (search)))
+(allow hdrpeak hdrpeak (lnk_file (read)))
+(allow hdrpeak hdrpeak (fifo_file (create read write getattr)))
 (allow hdrpeak null_device (chr_file (read write open getattr map ioctl)))
+(allow hdrpeak zero_device (chr_file (read open getattr map)))
+(allow hdrpeak random_device (chr_file (read open getattr map)))
+
+;; ---- logging: `log -t hdrpeak ...` --------------------------------------
 (allow hdrpeak logd_socket (sock_file (write getattr)))
 (allow hdrpeak logd (unix_stream_socket (connectto)))
 (allow hdrpeak logd_prop (file (read open getattr map)))
+
+;; ---- properties ---------------------------------------------------------
+;; reads: persist.sys.oplus.keyguard.showing (default_prop),
+;;        persist.nyako.* (default_prop), sys.oplus.* (system_prop),
+;;        init.svc.vendor.hdrblfollow (vendor_default_prop),
+;;        persist.sys.sf.* (surfaceflinger_color_prop, read for logging only)
 (allow hdrpeak default_prop (file (read open getattr map)))
 (allow hdrpeak system_prop (file (read open getattr map)))
 (allow hdrpeak vendor_default_prop (file (read open getattr map)))
 (allow hdrpeak surfaceflinger_color_prop (file (read open getattr map)))
+;; `setprop ctl.stop vendor.hdrblfollow` (hdrpeak.sh follow_retire)
+(allow hdrpeak ctl_default_prop (property_service (set)))
+(allow hdrpeak property_socket (sock_file (write)))
+(allow hdrpeak init (unix_stream_socket (connectto)))
+
+;; ---- display sysfs (labels verified in vendor_file_contexts) ------------
+;; /sys/class/mi_display/disp-DSI-0/**            vendor_sysfs_displayfeature
+;;   disp_param (dimming[00], hbm_backlight_level[22]), brightness_clone,
+;;   doze_brightness, dynamic_fps
+;; /sys/class/backlight/panel0-backlight/**       vendor_sysfs_graphics
+;;   brightness (SDR ceiling + exit restore source), bl_power
+;; Everything above those leaves is plain sysfs (directory walk + symlinks).
 (allow hdrpeak sysfs (dir (search read open getattr)))
 (allow hdrpeak sysfs (lnk_file (read getattr)))
 (allow hdrpeak vendor_sysfs_displayfeature (dir (search read open getattr)))
@@ -52,25 +98,56 @@
 (allow hdrpeak vendor_sysfs_graphics (dir (search read open getattr)))
 (allow hdrpeak vendor_sysfs_graphics (file (read write open getattr map)))
 (allow hdrpeak vendor_sysfs_graphics (lnk_file (read getattr)))
-(allow hdrpeak vendor_displayfeature_device (chr_file (read write open ioctl map getattr)))
+
+;; ---- `dumpsys SurfaceFlinger` (numHdrLayers) and `dumpsys display` ------
 (allow hdrpeak surfaceflinger_service (service_manager (find)))
 (allow hdrpeak display_service (service_manager (find)))
-(allow hdrpeak vendor_DisplayFeatureControl_service (service_manager (find)))
 (allow hdrpeak servicemanager (binder (call transfer)))
 (allow servicemanager hdrpeak (binder (call transfer)))
 (allow hdrpeak surfaceflinger (binder (call transfer)))
 (allow surfaceflinger hdrpeak (binder (call transfer)))
+(allow hdrpeak system_server (binder (call transfer)))
+(allow system_server hdrpeak (binder (call transfer)))
+(allow hdrpeak surfaceflinger (fd (use)))
+(allow hdrpeak system_server (fd (use)))
+
+;; ---- vndservice -> DisplayFeatureControl 100 (df_hdr 1/0) ---------------
+(allow hdrpeak vendor_file (file (read open getattr map execute execute_no_trans)))
+(allow hdrpeak vndbinder_device (chr_file (read write open ioctl map getattr)))
+(allow hdrpeak vndservicemanager (dir (search read open getattr)))
+(allow hdrpeak vndservicemanager (file (read open getattr)))
+(allow hdrpeak vndservicemanager (binder (call transfer)))
+(allow vndservicemanager hdrpeak (binder (call transfer)))
+(allow hdrpeak vendor_displayfeature (service_manager (find)))
+(allow hdrpeak vendor_displayfeature (binder (call transfer)))
+(allow vendor_displayfeature hdrpeak (binder (call transfer)))
+
+;; ---- /dev/mi_display/disp_feature (label exists; not used by hdrpeak.sh,
+;;      kept for a future ioctl path) --------------------------------------
+(allow hdrpeak vendor_displayfeature_device (chr_file (read write open ioctl map getattr)))
+;; ====================== end hdrpeak =======================================
+
+;; hdrpeak pipe use for dumpsys SurfaceFlinger (rootless HDR exit/entry)
 (allow surfaceflinger hdrpeak (fd (use)))
 (allow surfaceflinger hdrpeak (fifo_file (read write getattr)))
+;; === cos17 permanent rootless HDR, memkiller & xtouch_tune rules ===
 (allow surfaceflinger hdrpeak (dir (search)))
 (allow surfaceflinger hdrpeak (file (open read getattr)))
+(allow hdrpeak vendor_DisplayFeatureControl_service (service_manager (find)))
 (allow vndservicemanager hdrpeak (dir (search)))
 (allow vndservicemanager hdrpeak (file (open read getattr)))
 (allow vndservicemanager hdrpeak (process (getattr)))
 
-;; 3. Rootless oneshot helper domain: cos17_memkiller
-;;    Used by /vendor/bin/cos17_thermal_once, /vendor/bin/cos17_dexopt_once,
-;;    and /vendor/bin/cos17_memkiller_ctl.
+;; Custom vendor-readable property type for persist.sys.oplus.dt2w_enable
+(type cos17_dt2w_prop)
+(roletype object_r cos17_dt2w_prop)
+(typeattributeset property_type (cos17_dt2w_prop))
+(typeattributeset system_property_type (cos17_dt2w_prop))
+(typeattributeset system_public_property_type (cos17_dt2w_prop))
+(allow system_server cos17_dt2w_prop (property_service (set)))
+(allow system_server cos17_dt2w_prop (file (read open getattr map)))
+
+;; cos17_memkiller domain (coredomain executing /system/bin/sh /vendor/bin/memkiller_ctl.sh)
 (type cos17_memkiller)
 (type cos17_memkiller_exec)
 (roletype object_r cos17_memkiller_exec)
@@ -80,27 +157,26 @@
 (typeattributeset file_type (cos17_memkiller_exec))
 (typeattributeset exec_type (cos17_memkiller_exec))
 (typeattributeset vendor_file_type (cos17_memkiller_exec))
-
 (allow init cos17_memkiller_exec (file (read getattr map execute open)))
 (allow init cos17_memkiller (process (transition siginh rlimitinh)))
 (dontaudit init cos17_memkiller (process (noatsecure)))
 (typetransition init cos17_memkiller_exec process cos17_memkiller)
 
-(allow cos17_memkiller cos17_memkiller_exec (file (entrypoint read open getattr map execute)))
 (allow cos17_memkiller shell_exec (file (entrypoint read open getattr map execute)))
+(allow cos17_memkiller cos17_memkiller_exec (file (read open getattr map)))
 (allow cos17_memkiller toolbox_exec (file (read open getattr map execute execute_no_trans)))
 (allow cos17_memkiller system_file (file (read open getattr map execute execute_no_trans)))
 (allow cos17_memkiller system_file (lnk_file (read getattr)))
 (allow cos17_memkiller shell_exec (lnk_file (read getattr)))
 (allow cos17_memkiller toolbox_exec (lnk_file (read getattr)))
-(allow cos17_memkiller vendor_file (dir (read open search getattr)))
+(allow cos17_memkiller vendor_file (dir (search)))
 (allow cos17_memkiller vendor_file (lnk_file (read getattr)))
 (allow cos17_memkiller system_lib_file (file (read open getattr map)))
 (allow cos17_memkiller system_bootstrap_lib_file (file (read open getattr map)))
 (allow cos17_memkiller system_linker_exec (file (read open getattr map execute)))
 (allow cos17_memkiller system_linker_config_file (file (read open getattr map)))
 
-(allow cos17_memkiller self (process (fork sigchld getpgid getsched setsched)))
+(allow cos17_memkiller self (process (fork sigchld getpgid getsched)))
 (allow cos17_memkiller self (capability (kill)))
 (allow cos17_memkiller self (fd (use)))
 (allow cos17_memkiller cos17_memkiller (dir (search read open getattr)))
@@ -109,18 +185,25 @@
 (allow cos17_memkiller cos17_memkiller (fifo_file (create read write getattr)))
 (allow cos17_memkiller null_device (chr_file (read write open getattr map ioctl)))
 (allow cos17_memkiller zero_device (chr_file (read open getattr map)))
+
 (allow cos17_memkiller logd_socket (sock_file (write getattr)))
 (allow cos17_memkiller logd (unix_stream_socket (connectto)))
 (allow cos17_memkiller logd_prop (file (read open getattr map)))
 
+;; Properties & proc read; lmkd SIGSTOP/SIGCONT; system_server device_config/activity binder
+(allow cos17_memkiller default_prop (file (read open getattr map)))
+(allow cos17_memkiller system_prop (file (read open getattr map)))
+(allow cos17_memkiller system_prop (property_service (set)))
+(allow cos17_memkiller system_lmk_prop (file (read open getattr map)))
+(allow cos17_memkiller device_config_lmkd_native_prop (file (read open getattr map)))
+(allow cos17_memkiller property_socket (sock_file (write)))
+(allow cos17_memkiller init (unix_stream_socket (connectto)))
+
+(allow cos17_memkiller proc (dir (search read open getattr)))
+(allow cos17_memkiller proc (lnk_file (read getattr)))
 (allow cos17_memkiller proc_meminfo (file (read open getattr)))
 (allow cos17_memkiller proc_uptime (file (read open getattr)))
 (allow cos17_memkiller proc_watermark_scale_factor (file (read write open getattr)))
-(allow cos17_memkiller sysfs (dir (read open search getattr)))
-(allow cos17_memkiller sysfs (lnk_file (read getattr)))
-(allow cos17_memkiller sysfs_thermal (dir (read open search getattr)))
-(allow cos17_memkiller sysfs_thermal (lnk_file (read getattr)))
-(allow cos17_memkiller sysfs_thermal (file (read open getattr)))
 (allow cos17_memkiller lmkd (dir (search read open getattr)))
 (allow cos17_memkiller lmkd (file (read open getattr)))
 (allow cos17_memkiller lmkd (process (signal sigstop getsched)))
@@ -128,17 +211,9 @@
 (allow cos17_memkiller system_server (file (read open getattr)))
 (allow cos17_memkiller system_server (process (getattr)))
 
-;; Binder access for cmd appops / connectivity (OEM_DENY_3) / wifi (RSSI poll) / package (dexopt) / device_config / settings
 (allow cos17_memkiller activity_service (service_manager (find)))
 (allow cos17_memkiller device_config_service (service_manager (find)))
 (allow cos17_memkiller settings_service (service_manager (find)))
-(allow cos17_memkiller package_service (service_manager (find)))
-(allow cos17_memkiller package_native_service (service_manager (find)))
-(allow cos17_memkiller appops_service (service_manager (find)))
-(allow cos17_memkiller connectivity_service (service_manager (find)))
-;; v7.2 Gap B fix: allows `cmd wifi set-poll-rssi-interval-msecs 6000` rootlessly (0 AVCs)
-(allow cos17_memkiller wifi_service (service_manager (find)))
-
 (allow cos17_memkiller servicemanager (binder (call transfer)))
 (allow servicemanager cos17_memkiller (binder (call transfer)))
 (allow servicemanager cos17_memkiller (dir (search)))
@@ -152,5 +227,67 @@
 (allow system_server cos17_memkiller (dir (search)))
 (allow system_server cos17_memkiller (file (open read getattr)))
 
+;; Silence benign fallback probes already handled cleanly by init .rc triggers
+(dontaudit cos17_memkiller self (capability (dac_override sys_ptrace)))
+(dontaudit cos17_memkiller proc (file (read write open getattr)))
+(dontaudit cos17_memkiller init_svc_debug_prop (file (read open getattr map)))
+(dontaudit cos17_memkiller vendor_default_prop (file (read open getattr map)))
+(dontaudit cos17_memkiller domain (dir (search read open getattr)))
+(dontaudit cos17_memkiller domain (file (read open getattr)))
+
+;; vendor_xtouch_tune domain (/vendor/bin/xtouch_tune --daemon)
+(type vendor_xtouch_tune)
+(type vendor_xtouch_tune_exec)
+(roletype object_r vendor_xtouch_tune_exec)
+(typeattributeset domain (vendor_xtouch_tune))
+(typeattributeset file_type (vendor_xtouch_tune_exec))
+(typeattributeset exec_type (vendor_xtouch_tune_exec))
+(typeattributeset vendor_file_type (vendor_xtouch_tune_exec))
+(allow init vendor_xtouch_tune_exec (file (read getattr map execute open)))
+(allow init vendor_xtouch_tune (process (transition siginh rlimitinh)))
+(dontaudit init vendor_xtouch_tune (process (noatsecure)))
+(typetransition init vendor_xtouch_tune_exec process vendor_xtouch_tune)
+
+(allow vendor_xtouch_tune vendor_xtouch_tune_exec (file (entrypoint read open getattr map execute)))
+(allow vendor_xtouch_tune vendor_file (dir (search)))
+(allow vendor_xtouch_tune vendor_file (lnk_file (read getattr)))
+(allow vendor_xtouch_tune vendor_configs_file (file (read open getattr map)))
+(allow vendor_xtouch_tune system_lib_file (file (read open getattr map)))
+(allow vendor_xtouch_tune system_bootstrap_lib_file (file (read open getattr map)))
+(allow vendor_xtouch_tune system_linker_exec (file (read open getattr map execute)))
+(allow vendor_xtouch_tune system_linker_config_file (file (read open getattr map)))
+(allow vendor_xtouch_tune self (process (fork sigchld getpgid getsched)))
+(allow vendor_xtouch_tune self (fd (use)))
+(allow vendor_xtouch_tune null_device (chr_file (read write open getattr map ioctl)))
+(allow vendor_xtouch_tune logd_socket (sock_file (write getattr)))
+(allow vendor_xtouch_tune logd (unix_stream_socket (connectto)))
+(allow vendor_xtouch_tune logd_prop (file (read open getattr map)))
+(allow vendor_xtouch_tune cos17_dt2w_prop (file (read open getattr map)))
+(allow vendor_xtouch_tune touchfeature_device (chr_file (ioctl read write getattr lock append map open)))
+(allow vendor_xtouch_tune sysfs (dir (search read open getattr)))
+(allow vendor_xtouch_tune sysfs (lnk_file (read getattr)))
+(allow vendor_xtouch_tune vendor_sysfs_graphics (dir (search read open getattr)))
+(allow vendor_xtouch_tune vendor_sysfs_graphics (file (read open getattr)))
+(allow vendor_xtouch_tune vendor_sysfs_graphics (lnk_file (read getattr)))
+(dontaudit vendor_xtouch_tune self (capability (dac_override)))
+(dontaudit vendor_xtouch_tune system_data_root_file (dir (search)))
+(dontaudit vendor_xtouch_tune adb_data_file (dir (search write add_name create)))
 (allow cos17_memkiller device_config_lmkd_native_prop (property_service (set)))
 (allow cos17_memkiller system_lmk_prop (property_service (set)))
+;; === cos17_stage1_opt native ELF entrypoint rules ===
+(allow hdrpeak hdrpeak_exec (file (entrypoint read open getattr map execute)))
+(allow cos17_memkiller cos17_memkiller_exec (file (entrypoint read open getattr map execute)))
+;; === cos17_stage1_opt rootless package_service for opluscam_init & dexopt_once ===
+(allow cos17_memkiller package_service (service_manager (find)))
+(allow cos17_memkiller package_native_service (service_manager (find)))
+;; === cos17_stage1_opt task4 memkiller zero-avc rules ===
+(allow cos17_memkiller vendor_file (dir (read open search getattr)))
+(allow cos17_memkiller appops_service (service_manager (find)))
+(allow cos17_memkiller connectivity_service (service_manager (find)))
+(allow cos17_memkiller wifi_service (service_manager (find)))
+(allow cos17_memkiller self (process (setsched)))
+(allow cos17_memkiller sysfs (dir (read open search getattr)))
+(allow cos17_memkiller sysfs (lnk_file (read getattr)))
+(allow cos17_memkiller sysfs_thermal (dir (read open search getattr)))
+(allow cos17_memkiller sysfs_thermal (lnk_file (read getattr)))
+(allow cos17_memkiller sysfs_thermal (file (read open getattr)))

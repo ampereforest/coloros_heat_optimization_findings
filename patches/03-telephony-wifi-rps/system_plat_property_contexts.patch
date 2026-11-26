@@ -1,0 +1,27 @@
+# Patch: Remap qemu.hw.mainkeys & qemu.sf.lcd_density out of qemu_prop (Duck Virtualization Clear) + add cos17_dt2w_prop & n3_route_boot_prop
+# Target: /system/etc/selinux/plat_property_contexts
+--- a/system/etc/selinux/plat_property_contexts
++++ b/system/etc/selinux/plat_property_contexts
+@@ -252,11 +252,9 @@
+ dalvik.                 u:object_r:dalvik_prop:s0
+ ro.dalvik.              u:object_r:dalvik_prop:s0
+ 
+-# qemu_hw_prop is read/written by both system and vendor.
+-qemu.hw.mainkeys        u:object_r:qemu_hw_prop:s0 exact string
+-
+-# qemu_sf_lcd_density_prop is read/written by both system and vendor.
+-qemu.sf.lcd_density     u:object_r:qemu_sf_lcd_density_prop:s0 exact int
++qemu.hw.mainkeys        u:object_r:exported_default_prop:s0 exact string
++
++qemu.sf.lcd_density     u:object_r:surfaceflinger_prop:s0 exact int
+ 
+ # Shared between system server and wificond
+ wifi.                   u:object_r:wifi_prop:s0
+@@ -1972,3 +1970,7 @@
+ thermal.dynamic_config_profile    u:object_r:thermal_profile_prop:s0 exact enum default setup kids_setup kids
+ #line 1 "out/soong/.intermediates/system/sepolicy/contexts/plat_property_contexts/android_common/newline"
+ 
++
++sys.n3.route.boot_attempted u:object_r:n3_route_boot_prop:s0 exact int
++# cos17 DT2W toggle property readable by vendor_xtouch_tune
++persist.sys.oplus.dt2w_enable   u:object_r:cos17_dt2w_prop:s0

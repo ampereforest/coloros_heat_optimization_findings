@@ -1,0 +1,43 @@
+# Patch: Disable iostat/fault_report telemetry, set slide_effect_protect_time=0, align PLZ110 identity & camera portrait depth props
+# Target: /odm/etc/build.prop
+--- a/odm/etc/build.prop
++++ b/odm/etc/build.prop
+@@ -5,9 +5,9 @@
+ ro.product.odm.brand=OnePlus
+ ro.product.odm.device=dada
+ ro.product.odm.manufacturer=OnePlus
+-ro.product.odm.model=PLK110
++ro.product.odm.model=PLZ110
+ ro.product.odm.cert=24129PN74C
+-ro.product.odm.marketname=OnePlus 15
++ro.product.odm.marketname=OnePlus 15T
+ ro.product.odm.name=dada
+ ro.product.model_for_attestation=24129PN74C
+ ro.product.brand_for_attestation=Xiaomi
+@@ -237,8 +237,8 @@
+ ro.vendor.touch.touchscheduler.enable=true
+ persist.vendor.touchfeature.ticketgrab.enable=true
+ ro.vendor.kernel.build=ogki_prebuild
+-persist.sys.stability.iostat=true
+-persist.sys.stability.fault_report=true
++persist.sys.stability.iostat=false
++persist.sys.stability.fault_report=false
+ persist.sys.stability.vip_file=true
+ ro.vendor.s2_reboot_time=12
+ persist.vendor.wlan.multi_p2p=true
+@@ -324,7 +324,7 @@
+ ro.odm.mm.vibrator.sys_path=/sys/class/qcom-haptics
+ ro.odm.mm.vibrator.device_type=agm
+ ro.odm.mm.vibrator.resonant_frequency=170
+-ro.odm.mm.vibrator.slide_effect_protect_time=35
++ro.odm.mm.vibrator.slide_effect_protect_time=0
+ ro.odm.mm.vibrator.audio_haptic_support=true
+ sys.haptic.motor=linear
+ sys.haptic.infinitelevel=true
+@@ -416,3 +416,6 @@
+ 
+ ro.product.odm.brand=OnePlus
+ ro.product.odm.manufacturer=OnePlus
++# Xiaomi dada ColorOS 17 portrait depth tuning (persist across data format)
++persist.vendor.camera.mialgo.capdepth.debuglitemode=0
++persist.vendor.camera.mialgo.capbokeh.debuglitemode=0

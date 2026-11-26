@@ -1,6 +1,8 @@
 # ColorOS 17 Thermal, Stability, Smoothness & Zero-Delay FCM Optimization Findings (`dada` / SM8750)
 
-Reproducible root-cause analysis, verified unified `.patch` files, zero-polling C/C++/Java/smali sources, offset-verified AArch64 ELF patchers, and KMI-safe GKI kernel configs for eliminating thermal buildup, UI scroll/unlock stutter, `SurfaceFlinger` soft reboots, standby drain, and CN FCM push delays on **ColorOS 17** ported to **Xiaomi 15 (`dada`, Snapdragon 8 Elite / SM8750)**.
+Reproducible root-cause analysis, verified unified `.patch` files, zero-polling C/C++/Java/smali sources, offset-verified AArch64 ELF patchers, prebuilt 16 KiB-aligned ARM64 runtime artifacts, and KMI-safe GKI kernel configs for eliminating thermal buildup, UI scroll/unlock stutter, `SurfaceFlinger` soft reboots, standby drain, and CN FCM push delays on **ColorOS 17** ported to **Xiaomi 15 (`dada`, Snapdragon 8 Elite / SM8750)**.
+
+> **Complete Standalone ROM Mod Collection:** For all non-thermal ROM mods (eSIM, Camera, HDR/Display, GPU/ANGLE, OpenAlive, OSee, Circle to Search, SystemUI/Settings patches, custom signing pipeline, and Titanium Browser integration), see [`ampereforest/ColorOS-V6-Standalone-Mods`](https://github.com/ampereforest/ColorOS-V6-Standalone-Mods).
 
 ---
 
@@ -9,12 +11,12 @@ Reproducible root-cause analysis, verified unified `.patch` files, zero-polling 
 | Attribute | Value |
 | :--- | :--- |
 | **Target Device** | Xiaomi 15 (`dada`, Qualcomm SM8750 / `sun`, 12 GB RAM, BOLED 1–120 Hz LTPO) |
-| **Ported OS Base** | **ColorOS 17 V6 CN — `PLZ110_17.0.0.107(CN01)`** (OnePlus 15T base, Android 17 / API 37) |
+| **Ported OS Base** | **ColorOS 17 V6 CN — `PLZ110_17.0.0.107(CN01)`** (base ROM `Xiaomi15_ColorOS17_V6.zip` by TUSB_5834@Coolapk, Android 17 / API 37) |
 | **Vendor / ODM Hardware Base** | Xiaomi 15 Stock HyperOS `OS4.0.0.11.XOCMIXM` (`vendor` / `odm` HALs & firmware) |
 | **Optimization Build Milestone** | **`v7.3.1`** (100% rootless-baked `super.img`, verified live in pure non-root `uid=2000` `SELinux Enforcing` with zero `service.sh` / zero Magisk / zero KernelSU / zero LSPosed dependency) |
 | **Companion GKI Kernel** | **`6.6.118-android15-wild-trsy` (`r24`)** ([`ampereforest/GKI_KernelSU_SUSFS`](https://github.com/ampereforest/GKI_KernelSU_SUSFS/releases/tag/r24)) |
 
-> **Important for Porters:** All unified `.patch` files under [`patches/`](patches/) and AArch64 binary patchers under [`scripts/`](scripts/) are pinned against the exact base port above and verified via `patch --dry-run` + clean apply. Every ELF patcher verifies ELF headers, original MD5 hashes, and exact instruction bytes before modifying a single byte.
+> **Important for Porters:** Every unified `.patch` file under [`patches/`](patches/) is generated directly against the exact base V6 `super.img` partitions and verified via `patch --dry-run` + output hash verification against our final `v7.3.1` build. Every ELF patcher under [`scripts/`](scripts/) verifies ELF headers and exact original instruction words before modifying a single byte.
 
 ---
 
@@ -23,10 +25,10 @@ Reproducible root-cause analysis, verified unified `.patch` files, zero-polling 
 Every optimization in this repository obeys five strict engineering rules:
 
 1. **Zero Clock-Capping / Zero Performance Loss:** Never lower `scaling_max_freq` on CPU clusters (`3.53 GHz` Oryon-M / `4.32 GHz` Oryon-L Prime) or Adreno GPU (`1,100 MHz`). Heat is eliminated by removing *wasted work* (polling loops, `QtiImsExtConnector` bind storms, `SCHEDBOOST=2` scroll spikes, 5G TCP retransmit locks, SELinux AVC storms, runaway thermal overrides, and `kswapd0` thrashing), never by handicapping peak performance.
-2. **100% Rootless Architecture:** Every init trigger, property override, SELinux CIL rule, Nyako native hook (`overlay.so`, `libNyako_hook_ltpofix.so`, `libNyako_hook_fcmsys.so`, `libNyako_hook_fcmbatt.so`), smali guard (`ims-ext-common.jar`), and pure-C one-shot helper bakes directly into `super.img` with **zero root / zero Magisk / zero KernelSU / zero LSPosed runtime dependency**.
+2. **100% Rootless Architecture:** Every init trigger, property override, SELinux CIL rule, Nyako native hook (`overlay.so`, `libNyako_hook_ltpofix.so`, `libNyako_hook_fcmsys.so`, `libNyako_hook_fcmbatt.so`), smali guard (`ims-ext-common.jar`, `fod-bridge.jar`), and pure-C one-shot helper bakes directly into `super.img` with **zero root / zero Magisk / zero KernelSU / zero LSPosed runtime dependency**.
 3. **Zero Polling Loops:** Every custom daemon (`hdrpeakd`, `overlay.so`, `ltpofix_plugin.cpp`, `xmvibproxy_v2`, `cos17_thermal_once`, `cos17_dexopt_once`, `cos17_memkiller_ctl`) is either strictly **one-shot** or **kernel futex / AIDL / `CLOCK_MONOTONIC` condvar event-driven** (`0.000%` idle CPU).
 4. **Zero Destructive Debloat:** No user-facing ColorOS apps or features are deleted. Background CN telemetry is contained non-destructively via Android 15 kernel eBPF (`FIREWALL_CHAIN_OEM_DENY_3`), per-package/UID `appops`, and `/system/etc/hosts` sinkholing, while keeping `com.heytap.market` (App Market, 100% unrestricted), `com.heytap.mydevices` (Bluetooth UI), Gallery Editor + AI (`com.oplus.aiunit` / `com.oplus.deepthinker`), OpenEUICC eSIM, OShare, Titanium Browser, 1–120 Hz LTPO, 3200-nit HDR, and O-Haptics fully intact.
-5. **Strict Enforcing SELinux Hygiene:** Zero DirtySepolicy rules, zero `*qemu*` properties, `0` new SELinux AVCs at boot/runtime, 16 KB ELF `PT_LOAD` alignment across all compiled binaries/libraries, and `secilc -N` **`NEW_PAIRS=0`**.
+5. **Strict Enforcing SELinux Hygiene:** Zero DirtySepolicy rules, zero `*qemu*` properties, zero `execmem` (`libnyako_core.so` 256 KiB file-backed COW pool), `0` new SELinux AVCs at boot/runtime, 16 KiB ELF `PT_LOAD` alignment across all compiled binaries/libraries, and `secilc -N` **`NEW_PAIRS=0`**.
 
 ---
 
@@ -62,27 +64,34 @@ Full raw tables and measurement methodology are documented in [`docs/BENCHMARKS-
 .
 ├── README.md
 ├── docs/
-│   ├── ROOT-CAUSES.md                         # Forensic analysis of all 10 categories + Thermal Boomerang pitfalls
+│   ├── ROOT-CAUSES.md                         # Forensic analysis of all categories + Thermal Boomerang pitfalls
 │   ├── BENCHMARKS-AND-TELEMETRY.md            # Complete BEFORE vs. AFTER telemetry (Pass 1–3 & v7.1 -> v7.3.1)
 │   └── KERNEL-GKI-TWEAKS.md                   # android15-6.6 KMI-safe power tweaks & runtime verification guide
+├── prebuilt/                                  # Ready-to-deploy 16 KiB-aligned ARM64 binaries & Nyako hooks (see prebuilt/README.md)
+│   ├── README.md
+│   ├── SHA256SUMS / MD5SUMS
+│   ├── system/etc/mifod/fod-bridge.jar
+│   ├── system/lib64/{libnyako_core.so,overlay.so,libNyako_hook_ltpofix.so,libNyako_hook_fcmsys.so,libNyako_hook_fcmbatt.so}
+│   └── vendor/bin/{cos17_thermal_once,cos17_dexopt_once,cos17_memkiller_ctl,hdrpeakd,xtouch_tune,hw/xmvibproxy}
 ├── patches/
-│   ├── 01-thermal-perf/                       # PerfBreak neutralization, v7.3.1 perfboostsconfig (0 scroll SCHEDBOOST=2), perfconfigstore, sys_thermal_config, thermallevel_to_fps
-│   ├── 02-display-ltpo-cwb/                   # CWB 1000ms throttle, overlay.so v4.1 + LtpoFixHooks v8.1 deployment guide
-│   ├── 03-telephony-wifi-rps/                 # 4G/5G Fast Dormancy (0x1AA708), 31-domain CN hosts sinkhole, netd.rc + plat_file_contexts (oplus_dnsproxyd), init.oplus.debug.rc, my_product/cust radio props, WCNSS_qcom_cfg, midasd/ostatsd/init.rc, SELinux CIL
-│   ├── 04-memory-vm-props/                    # post_boot WatermarkScale=20, system & vendor build.prop hygiene
+│   ├── 01-thermal-perf/                       # PerfBreak neutralization, v7.3.1 perfboostsconfig, perfconfigstore, sys_thermal_config, thermallevel_to_fps
+│   ├── 02-display-ltpo-cwb/                   # CWB 1000ms throttle, ALS always-on off, UniRender off, ltpo_overlay.rc, hdrblfollow.rc disable
+│   ├── 03-telephony-wifi-rps/                 # 4G/5G Fast Dormancy (0x1AA708), 31-domain CN hosts sinkhole, netd.rc, init.oplus.debug.rc, midasd/ostats*/odm/wpa_supplicant RCs, build.prop hygiene, WCNSS_qcom_cfg, complete SELinux CIL/contexts/nyako patches
+│   ├── 04-memory-vm-props/                    # post_boot WatermarkScale=20, complete system & vendor build.prop patches
 │   ├── 05-kernel-gki-defconfig/               # thermal-efficiency.fragment, GitHub Action, build.yml hook patch
-│   └── 06-stability-fcm-ims/                  # v7.3.1 QtiImsExtConnector.smali patch, dual cn.google.services removals, DeviceIdle GMS whitelist, deployment notes
+│   └── 06-stability-fcm-ims/                  # v7.3.1 QtiImsExtConnector.smali, MiFodBridge.smali, dual cn.google.services removals, DeviceIdle GMS whitelist
 ├── src/
-│   ├── daemons/                               # cos17_thermal_once.c (v8), cos17_dexopt_once.c (v2), cos17_memkiller_ctl.c, hdrpeakd.cpp, build_ndk.sh (16KB-aligned)
-│   ├── fcm/                                   # fcm_plugin.cpp, java/com/nyako/fcm/FcmHooks.java, build_fcm.sh (split-scope fcmsys + fcmbatt)
-│   ├── haptics/                               # xmvibproxy_v2.cpp (Setup Wizard code=6 stop & single-envelope RTP)
-│   ├── init/                                  # init.cos17_dada_perf.rc (4ms/960MHz/ed=0 WALT + 6.6 input_boost + rmnet_ipa0 RPS), cos17_daemons.rc (swappiness 60), cos17_dexopt.rc, hdrpeak.rc, ltpo_overlay.rc
-│   ├── ltpo/                                  # overlay.cpp (v4.1 RefreshRateSelector crash guard), ltpofix_plugin.cpp (v8), Java LtpoFixHooks (v8.1)/PanelSafety/PointerMonitor
-│   ├── nyako/                                 # nyako_scope_filter.c (17-scope freestanding PC-relative matcher)
-│   └── ui/                                    # VideoBlurSuppressionController.java (R14 smart video blur suppression)
+│   ├── daemons/                               # cos17_thermal_once.c (v8), cos17_dexopt_once.c (v2), cos17_memkiller_ctl.c, hdrpeakd.cpp, xtouch_tune.c, build_ndk.sh
+│   ├── fcm/                                   # fcm_plugin.cpp, java/com/nyako/fcm/FcmHooks.java, build_fcm.sh
+│   ├── haptics/                               # xmvibproxy_v2.cpp
+│   ├── init/                                  # init.cos17_dada_perf.rc, cos17_daemons.rc (swappiness 60), cos17_dexopt.rc, hdrpeak.rc, ltpo_overlay.rc
+│   ├── ltpo/                                  # overlay.cpp (v4.1), ltpofix_plugin.cpp (v8), embed_dex.S, Java LtpoFixHooks (v8.1)/PanelSafety/PointerMonitor
+│   ├── nyako/                                 # nyako_noexec_stub.c (Step A zero-execmem COW pool), nyako_scope_filter.c (Step B 17-scope fast-path)
+│   └── ui/                                    # VideoBlurSuppressionController.java
 └── scripts/
     ├── patch_color_mode_sync.py               # Offset-verified ELF patcher: eliminate 2 Hz settings fork storm
-    ├── patch_libnyako_scope.py                # Offset-verified ELF patcher: libnyako_core.so 17-scope fast-path + UID-0 chmod + fsetxattr=0
+    ├── patch_libnyako_core.py                 # Step A offset-verified ELF patcher: zero-execmem 256 KiB PT_LOAD[4] COW pool
+    ├── patch_libnyako_scope.py                # Step B offset-verified ELF patcher: 17-scope fast-path + UID-0 chmod + fsetxattr=0
     ├── patch_libopex.py                       # Offset-verified ELF patcher: libopex.so static opex bypass
     ├── patch_pass2_culprits.py                # Offset-verified ELF patcher: libcameraopt, citsensorservice, libatlasservice, horae
     ├── patch_sensors_qsh_cct.py               # Offset-verified ELF patcher: sensors.qsh.so 0x1fa2672 -> 0x1fa2692
@@ -93,7 +102,7 @@ Full raw tables and measurement methodology are documented in [`docs/BENCHMARKS-
 
 ## How Porters Apply These Fixes
 
-### 1. Apply Unified Config, XML, Init & Property Patches (`patches/`)
+### 1. Apply Unified Config, XML, Init, Property & SELinux Patches (`patches/`)
 From the root of your unpacked ROM tree (containing `system/`, `system_ext/`, `product/`, `my_product/`, `my_region/`, `my_stock/`, `vendor/`, `odm/`):
 
 ```bash
@@ -106,28 +115,43 @@ patch -p1 < patches/01-thermal-perf/odm_sys_thermal_config.patch
 patch -p1 < patches/01-thermal-perf/my_stock_sys_thermal_config.patch
 patch -p1 < patches/01-thermal-perf/vendor_thermallevel_to_fps.patch
 
-# 02 — Display, LTPO & CWB
-patch -p1 < patches/02-display-ltpo-cwb/vendor_cwb_display_props.patch
+# 02 — Display, LTPO, UniRender & CWB
+patch -p1 < patches/02-display-ltpo-cwb/my_product_display_brightness_als.patch
+patch -p1 < patches/02-display-ltpo-cwb/my_product_unirender_disable.patch
+patch -p1 < patches/02-display-ltpo-cwb/system_ltpo_overlay_rc.patch
+patch -p1 < patches/02-display-ltpo-cwb/vendor_hdrblfollow_rc.patch
 
-# 03 — Active 5G Fast Dormancy, CN Sinkhole, Wi-Fi Offload, Socket Labels & Init Hygiene
+# 03 — Active 5G Fast Dormancy, CN Sinkhole, Wi-Fi Offload, Init & SELinux Hygiene
 patch -p1 < patches/03-telephony-wifi-rps/vendor_dpm_fast_dormancy.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_ext_dpm_fast_dormancy.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_hosts_cn_telemetry_sinkhole.patch
 patch -p1 < patches/03-telephony-wifi-rps/vendor_wcnss_qcom_cfg.patch
+patch -p1 < patches/03-telephony-wifi-rps/vendor_wpa_supplicant_rc.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_init_rc_hygiene.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_netd_oplus_dnsproxyd.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_plat_file_contexts_dnsproxyd.patch
+patch -p1 < patches/03-telephony-wifi-rps/system_plat_property_contexts.patch
+patch -p1 < patches/03-telephony-wifi-rps/system_nyako_cil.patch
+patch -p1 < patches/03-telephony-wifi-rps/system_nyako_rule.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_ext_init_oplus_debug_rc.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_ext_midasd_rc.patch
 patch -p1 < patches/03-telephony-wifi-rps/system_ext_ostatsd_rc.patch
+patch -p1 < patches/03-telephony-wifi-rps/system_ext_ostats_pullerd_rc.patch
+patch -p1 < patches/03-telephony-wifi-rps/system_ext_ostats_tpd_rc.patch
+patch -p1 < patches/03-telephony-wifi-rps/odm_thermalmntcfg_rc.patch
+patch -p1 < patches/03-telephony-wifi-rps/odm_mitrustedui_rc.patch
+patch -p1 < patches/03-telephony-wifi-rps/odm_build_prop_hygiene.patch
+patch -p1 < patches/03-telephony-wifi-rps/product_build_prop_qspa.patch
 patch -p1 < patches/03-telephony-wifi-rps/my_product_ims_audio_props.patch
 patch -p1 < patches/03-telephony-wifi-rps/my_product_cust_cn_regionlock.patch
+patch -p1 < patches/03-telephony-wifi-rps/vendor_file_contexts.patch
+patch -p1 < patches/03-telephony-wifi-rps/vendor_sepolicy_cil.patch
 
-# 04 — Memory VM & Rootless Build Properties
+# 04 — Memory VM & Rootless Build Properties (includes CWB 1000ms & HDR/LTPO props)
 patch -p1 < patches/04-memory-vm-props/vendor_post_boot_memory_watermark.patch
 patch -p1 < patches/04-memory-vm-props/system_build_prop_hygiene.patch
-# Note: vendor_build_prop_thermal_hygiene.patch and vendor_cwb_display_props.patch
-# both append to vendor/build.prop; merge the appended blocks if applying both.
+patch -p1 < patches/04-memory-vm-props/vendor_build_prop_thermal_hygiene.patch
+# (Or apply patches/02-display-ltpo-cwb/vendor_cwb_display_props.patch standalone if you only want CWB)
 
 # 06 — Rootless Zero-Delay FCM & QtiImsExtConnector Bind-Storm Elimination (v7.3.1)
 patch -p1 < patches/06-stability-fcm-ims/my_product_cn_gms_features.patch
@@ -135,26 +159,26 @@ patch -p1 < patches/06-stability-fcm-ims/odm_gnss_bds_preference.patch
 patch -p1 < patches/06-stability-fcm-ims/my_region_deviceidle_whitelist.patch
 ```
 
-For `product/framework/ims-ext-common.jar` (`patches/06-stability-fcm-ims/product_ims_ext_common_qti_connector.smali.patch`), disassemble via `baksmali`, apply the smali patch, reassemble with `smali a -a 28`, repack 4-byte aligned `ZIP_STORED`, and **remove the 6 stale `product/framework/oat/{arm,arm64}/ims-ext-common.{odex,vdex,fsv_meta}` files** (see [`patches/06-stability-fcm-ims/stability_fcm_ims_notes.md`](patches/06-stability-fcm-ims/stability_fcm_ims_notes.md)).
+For `product/framework/ims-ext-common.jar` (`patches/06-stability-fcm-ims/product_ims_ext_common_qti_connector.smali.patch`), disassemble via `baksmali`, apply the smali patch, reassemble with `smali a -a 28`, repack 4-byte aligned `ZIP_STORED`, and **remove the 6 stale `product/framework/oat/{arm,arm64}/ims-ext-common.{odex,vdex,fsv_meta}` files** (see [`patches/06-stability-fcm-ims/stability_fcm_ims_notes.md`](patches/06-stability-fcm-ims/stability_fcm_ims_notes.md)). For `system/etc/mifod/fod-bridge.jar`, either drop in `prebuilt/system/etc/mifod/fod-bridge.jar` or apply `patches/06-stability-fcm-ims/system_fod_bridge_smali.patch`.
 
-Merge [`patches/03-telephony-wifi-rps/system_sepolicy_cos17_snippet.cil`](patches/03-telephony-wifi-rps/system_sepolicy_cos17_snippet.cil) into both `/system/etc/selinux/plat_sepolicy.cil` and `/system_ext/etc/selinux/plat_sepolicy_debug.cil`, validate with `secilc -N` (`NEW_PAIRS=0`), and update `/system/etc/selinux/plat_sepolicy_and_mapping.sha256`.
+Merge [`patches/03-telephony-wifi-rps/system_sepolicy_cos17_snippet.cil`](patches/03-telephony-wifi-rps/system_sepolicy_cos17_snippet.cil) into both `/system/etc/selinux/plat_sepolicy.cil` and `/system_ext/etc/selinux/plat_sepolicy_debug.cil`, validate with `secilc -N` (`NEW_PAIRS=0`), and update `/system/etc/selinux/plat_sepolicy_and_mapping.sha256` & `/system_ext/etc/selinux/plat_sepolicy_and_mapping_debug.sha256`.
 
-### 2. Compile Native 16 KB-Aligned Zero-Polling Helpers, FCM Plugins & Install Init `.rc` Files (`src/`)
-```bash
-# Core daemons + overlay.so v4.1 (pass STATSLOG_BOOTSTRAP_SO if replacing PLZ110 /system/lib64/overlay.so)
-ANDROID_NDK_HOME=/path/to/android-ndk-r29 bash src/daemons/build_ndk.sh ./out/arm64-v8a
-
-# Split-scope rootless FCM plugins (libNyako_hook_fcmsys.so + libNyako_hook_fcmbatt.so)
-ANDROID_NDK_HOME=/path/to/android-ndk-r29 \
-ANDROID_BUILD_TOOLS=/path/to/android-sdk/build-tools/37.0.0 \
-LIBNYAKO_CORE_SO=/path/to/libnyako_core.so \
-bash src/fcm/build_fcm.sh ./out/fcm
-```
-Install compiled binaries and `src/init/*.rc`:
-- `cos17_thermal_once` (v8), `cos17_dexopt_once` (v2), `cos17_memkiller_ctl`, `hdrpeakd`, `xmvibproxy` -> `/vendor/bin/` (`0755`, matching `vendor_file_contexts` labels: `cos17_memkiller_exec` / `hdrpeak_exec`)
-- `overlay.so` (v4.1), `libNyako_hook_ltpofix.so` (v8.1), `libNyako_hook_fcmsys.so`, `libNyako_hook_fcmbatt.so` -> `/system/lib64/` (`0644`, `system_file`)
+### 2. Install Prebuilt Custom Binaries (`prebuilt/`) or Compile From Source (`src/`)
+The fastest verified route is installing the 16 KiB-aligned ARM64 binaries directly from [`prebuilt/`](prebuilt/README.md) alongside `src/init/*.rc`:
+- `prebuilt/vendor/bin/{cos17_thermal_once,cos17_dexopt_once,cos17_memkiller_ctl,hdrpeakd,xtouch_tune}` & `prebuilt/vendor/bin/hw/xmvibproxy` -> `/vendor/bin/` (`0755`, matching `vendor_file_contexts` labels)
+- `prebuilt/system/lib64/{libnyako_core.so,overlay.so,libNyako_hook_ltpofix.so,libNyako_hook_fcmsys.so,libNyako_hook_fcmbatt.so}` -> `/system/lib64/` (`0644`, `system_file`)
+- `prebuilt/system/etc/mifod/fod-bridge.jar` -> `/system/etc/mifod/fod-bridge.jar` (`0644`, `system_file`)
 - `src/init/{init.cos17_dada_perf,cos17_daemons,cos17_dexopt,hdrpeak}.rc` -> `/vendor/etc/init/` (`0644`)
 - `src/init/ltpo_overlay.rc` -> `/system/etc/init/` (`0644`)
+
+Or compile from source using Android NDK r29+:
+```bash
+ANDROID_NDK_HOME=/path/to/android-ndk-r29 bash src/daemons/build_ndk.sh ./out/arm64-v8a
+ANDROID_NDK_HOME=/path/to/android-ndk-r29 \
+ANDROID_BUILD_TOOLS=/path/to/android-sdk/build-tools/37.0.0 \
+LIBNYAKO_CORE_SO=prebuilt/system/lib64/libnyako_core.so \
+bash src/fcm/build_fcm.sh ./out/fcm
+```
 
 ### 3. Run Offset-Verified AArch64 Binary Patchers (`scripts/`)
 Every script checks ELF headers and exact original instructions before patching (use `--verify-only` first to dry-run):
@@ -164,8 +188,13 @@ python3 scripts/patch_surfaceflinger_renderintent.py -i system/bin/surfaceflinge
 python3 scripts/patch_color_mode_sync.py             -i odm/bin/hw/oplus-color-mode-sync -o out/oplus-color-mode-sync
 python3 scripts/patch_sensors_qsh_cct.py             -i vendor/lib64/sensors.qsh.so -o out/sensors.qsh.so
 python3 scripts/patch_libopex.py                     -i system_ext/lib64/libopex.so -o out/libopex.so
+
+# Two-step libnyako_core.so pipeline (already baked into prebuilt/system/lib64/libnyako_core.so):
 ANDROID_NDK_HOME=/path/to/android-ndk-r29 \
-python3 scripts/patch_libnyako_scope.py              -i system/lib64/libnyako_core.so -o out/libnyako_core.so
+python3 scripts/patch_libnyako_core.py               -i base/system/lib64/libnyako_core.so -o out/libnyako_core_v61.so
+ANDROID_NDK_HOME=/path/to/android-ndk-r29 \
+python3 scripts/patch_libnyako_scope.py              -i out/libnyako_core_v61.so -o out/libnyako_core.so
+
 python3 scripts/patch_pass2_culprits.py \
   --libcameraopt    vendor/lib64/libcameraopt.so \
   --citsensor       odm/bin/hw/vendor.xiaomi.sensor.citsensorservice.aidl \
@@ -193,4 +222,4 @@ See [`docs/KERNEL-GKI-TWEAKS.md`](docs/KERNEL-GKI-TWEAKS.md) for adding `CONFIG_
 
 ## License
 
-All custom C/C++/Java sources, Python patch scripts, init files, and documentation in this repository are licensed under the [MIT License](LICENSE). No proprietary vendor or OEM binaries are distributed in this repository.
+All custom C/C++/Java sources, Python patch scripts, init files, and documentation in this repository are licensed under the [MIT License](LICENSE). Prebuilt binaries under [`prebuilt/`](prebuilt/) comprise our custom-compiled helpers and patched Nyako runtime hooks required for ColorOS 17 V6 integration; no proprietary Qualcomm/Xiaomi/OPPO stock HAL blobs are redistributed here.

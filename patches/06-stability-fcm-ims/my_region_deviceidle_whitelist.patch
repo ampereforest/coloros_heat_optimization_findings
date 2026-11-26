@@ -1,9 +1,5 @@
-# Patch: Whitelist com.google.android.gms in my_region DeviceIdle Whitelist (v7.3)
-# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
-# Target Path: /my_region/etc/battery/sys_deviceidle_whitelist.xml
-# Notes: Adds com.google.android.gms alongside com.google.android.gsf so ColorOS OplusDeviceIdleHelper keeps GMS MCS (:5228) exempt inside Deep Doze without root or LSPosed.
-# Apply: patch -p1 < my_region_deviceidle_whitelist.patch
-#
+# Patch: Whitelist com.google.android.gms in ColorOS DeviceIdle whitelist (rootless Deep-Doze FCM)
+# Target: /my_region/etc/battery/sys_deviceidle_whitelist.xml
 --- a/my_region/etc/battery/sys_deviceidle_whitelist.xml
 +++ b/my_region/etc/battery/sys_deviceidle_whitelist.xml
 @@ -31,6 +31,7 @@
@@ -14,3 +10,10 @@
      <wl>com.google.android.gsf</wl>
      <wl>com.heytap.accessory</wl>
      <wl>com.heytap.browser</wl>
+@@ -49,4 +50,4 @@
+     <wl>com.oplus.sau</wl>
+     <wl>com.oplus.synergy</wl>
+ 	<wl>com.android.mms</wl>
+-</filter-conf>
+\ No newline at end of file
++</filter-conf>

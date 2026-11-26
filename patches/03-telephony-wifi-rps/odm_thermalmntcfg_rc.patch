@@ -1,0 +1,9 @@
+# Patch: Disable non-functional thermalmntcfg@1.0 service
+# Target: /odm/etc/init/vendor.oplus.hardware.thermalmntcfg@1.0-service.rc
+--- a/odm/etc/init/vendor.oplus.hardware.thermalmntcfg@1.0-service.rc
++++ b/odm/etc/init/vendor.oplus.hardware.thermalmntcfg@1.0-service.rc
+@@ -3,3 +3,4 @@
+ 	class hal
+ 	user system
+ 	group system
++	disabled

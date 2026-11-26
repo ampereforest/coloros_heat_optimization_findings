@@ -1,0 +1,12 @@
+# Patch: Set LightSensorAlwaysOnSupport=0 to prevent 24/7 ALS wakeups
+# Target: /my_product/vendor/etc/display_brightness_app_list.xml
+--- a/my_product/vendor/etc/display_brightness_app_list.xml
++++ b/my_product/vendor/etc/display_brightness_app_list.xml
+@@ -1121,6 +1121,7 @@
+ 
+     <comfortable_brightness>
+         <features>
++            <LightSensorAlwaysOnSupport>0</LightSensorAlwaysOnSupport>
+             <MotionModeSupport>1</MotionModeSupport>
+         </features>
+         <scene>

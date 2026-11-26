@@ -1,0 +1,12 @@
+# Patch: Strip system_server execmem from nyako.rule
+# Target: /system/etc/selinux/nyako.rule
+--- a/system/etc/selinux/nyako.rule
++++ b/system/etc/selinux/nyako.rule
+@@ -5,7 +5,6 @@
+ # Same shared-data model as Vector's xposed_data; Unix permissions still apply.
+ # Vector checks this before system-server injection; Magisk supplies it for Zygisk.
+ # ROM integration must carry it explicitly instead of depending on a root provider.
+-allow system_server system_server process execmem
+ # Zygisk supplies both grants. Built-in Nyako must not depend on a root provider.
+ allow zygote zygote process execmem
+ # New Android kernels distinguish memfd from ordinary file/tmpfs. Nyako's

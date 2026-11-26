@@ -1,12 +1,8 @@
-# Patch: Restore Xiaomi 15 Thermal-Level FPS Protection Curve (144->120->90->60 Hz)
-# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
-# Target Path: /vendor/etc/display/thermallevel_to_fps.xml
-# Notes: Replaces the base port's flattened 144 Hz table across levels 3..10 with Xiaomi 15's stock thermal stepping curve (144 -> 120 -> 90 -> 60 Hz).
-# Apply: patch -p1 < vendor_thermallevel_to_fps.patch
-#
+# Patch: Restore Xiaomi 15 stock thermal FPS step-down curve (144->120->90->60 & Device v2 60/40/30)
+# Target: /vendor/etc/display/thermallevel_to_fps.xml
 --- a/vendor/etc/display/thermallevel_to_fps.xml
 +++ b/vendor/etc/display/thermallevel_to_fps.xml
-@@ -10,14 +10,14 @@
+@@ -10,19 +10,19 @@
          <Device version="1">
              <ThermalLevelMap level="1" fps="144"/>
              <ThermalLevelMap level="2" fps="144"/>
@@ -28,4 +24,12 @@
 +            <ThermalLevelMap level="10" fps="60"/>
          </Device>
          <Device version="2">
-             <ThermalLevelMap level="1" fps="60"/>
+-            <ThermalLevelMap level="1" fps="144"/>
+-            <ThermalLevelMap level="2" fps="144"/>
+-            <ThermalLevelMap level="3" fps="144"/>
++            <ThermalLevelMap level="1" fps="60"/>
++            <ThermalLevelMap level="2" fps="40"/>
++            <ThermalLevelMap level="3" fps="30"/>
+         </Device>
+     </DeviceSettingList>
+ </ThermalLevelToFPSMap>

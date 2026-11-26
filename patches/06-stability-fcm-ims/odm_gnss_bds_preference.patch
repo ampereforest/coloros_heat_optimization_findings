@@ -1,15 +1,15 @@
-# Patch: Remove Hidden cn.google.services Feature from Xiaomi ODM GPS Permissions (v7.3)
-# Target Base Port: ColorOS 17 V6 CN (PLZ110_17.0.0.107(CN01), OnePlus 15T base) ported to Xiaomi 15 (dada, SM8750) / Stock HyperOS OS4.0.0.11 vendor base
-# Target Path: /odm/etc/permissions/com.gnss.bds_preference.xml
-# Notes: Xiaomi CN odm/etc/permissions/com.gnss.bds_preference.xml independently injects cn.google.services even after my_product is cleaned. Clearing this entry removes cn.google.services system-wide while preserving odm fs_config parity.
-# Apply: patch -p1 < odm_gnss_bds_preference.patch
-#
+# Patch: Remove cn.google.services feature from odm GNSS BDS preference XML (required for rootless FCM)
+# Target: /odm/etc/permissions/com.gnss.bds_preference.xml
 --- a/odm/etc/permissions/com.gnss.bds_preference.xml
 +++ b/odm/etc/permissions/com.gnss.bds_preference.xml
-@@ -1,6 +1,5 @@
+@@ -1,8 +1,5 @@
  <?xml version="1.0" encoding="utf-8"?>
  <!--MIUI ADD: GPS_BugFixUpstream-->
+-<!--This XML file is only for domestic machines that support BDS preference to pass the VTS test item(SV blocklist).
+-    Copy this file to /odm/etc/permissions/.-->
  <permissions>
 -    <feature name="cn.google.services" />
  </permissions>
- <!--END GPS_BugFixUpstream-->
+-<!--END GPS_BugFixUpstream-->
+\ No newline at end of file
++<!--END GPS_BugFixUpstream-->

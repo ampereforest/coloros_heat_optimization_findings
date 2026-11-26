@@ -1,0 +1,10 @@
+# Patch: Stop vendor.mitrustedui after boot_completed (prevents HyperOS TEE daemon crash-loop)
+# Target: /odm/etc/init/vendor.xiaomi.hardware.mitrustedui.rc
+--- a/odm/etc/init/vendor.xiaomi.hardware.mitrustedui.rc
++++ b/odm/etc/init/vendor.xiaomi.hardware.mitrustedui.rc
+@@ -11,4 +11,4 @@
+     chown system system /dev/mitee-tui-supp
+ 
+ on property:sys.boot_completed=1
+-    start vendor.mitrustedui
++    stop vendor.mitrustedui

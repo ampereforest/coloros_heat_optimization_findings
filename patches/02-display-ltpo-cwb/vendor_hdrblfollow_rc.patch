@@ -1,0 +1,12 @@
+# Patch: Disable legacy shell hdrblfollow service (replaced by zero-polling C++ hdrpeakd)
+# Target: /vendor/etc/init/hdrblfollow.rc
+--- a/vendor/etc/init/hdrblfollow.rc
++++ b/vendor/etc/init/hdrblfollow.rc
+@@ -1,6 +1,7 @@
+ # HDR 背光跟随：小米 HDR 时冻结背光，这里按 SF 亮度补写
+ service vendor.hdrblfollow /vendor/bin/hw/hdrblfollow.sh
+     class late_start
++    disabled
+     user root
+     group root system graphics
+     seclabel u:r:hdrblfollow:s0

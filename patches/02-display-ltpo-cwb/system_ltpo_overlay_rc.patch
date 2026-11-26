@@ -1,0 +1,21 @@
+# Patch: Update ltpo_overlay.rc to True Zero-CPU Hardware LTPO defaults
+# Target: /system/etc/init/ltpo_overlay.rc
+--- a/system/etc/init/ltpo_overlay.rc
++++ b/system/etc/init/ltpo_overlay.rc
+@@ -1,10 +1,12 @@
+-# C17 / dada LTPO ROM integration. Values are applied on every boot.
+-# Nyako core and its app_process64 entry point must already be integrated.
+-# This does not enable the developer-option refresh-rate display itself.
++# C17 / dada True Zero-CPU Hardware LTPO ROM integration.
++# Does not enable Developer Options "Show refresh rate" by default.
+ on boot
+     setprop debug.nyako.ltpo.overlay_probe 0
+     setprop debug.nyako.ltpo.idle_test 0
++    setprop debug.nyako.ltpo.sf_idle 0
++    setprop debug.nyako.ltpo.sf_overlay_on 0
+     setprop debug.sf.show_refresh_rate_overlay_render_rate 0
+     setprop persist.nyako.ltpo.force_mode 2
+     setprop persist.nyako.ltpo.auto_idle 1
+-    setprop persist.nyako.ltpo.content_overlay 1
++    setprop persist.nyako.ltpo.content_overlay 0
++    setprop persist.nyako.ltpo.log 0

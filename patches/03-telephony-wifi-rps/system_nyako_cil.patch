@@ -1,0 +1,12 @@
+# Patch: Strip system_server execmem from nyako.cil (enabled by zero-execmem libnyako_core.so PT_LOAD[4] COW pool)
+# Target: /system/etc/selinux/nyako.cil
+--- a/system/etc/selinux/nyako.cil
++++ b/system/etc/selinux/nyako.cil
+@@ -3,7 +3,6 @@
+ (typeattributeset file_type (nyako_data))
+ (typeattributeset mlstrustedobject (nyako_data))
+ ; Required by the system-server Hook engine; supplied by Magisk for Zygisk.
+-(allow system_server self (process (execmem)))
+ (allow zygote self (process (execmem)))
+ ; New-kernel anonymous file class, only each process's own buffers. Old ROMs
+ ; without this class omit the optional block; no cross-host memfd permissions.

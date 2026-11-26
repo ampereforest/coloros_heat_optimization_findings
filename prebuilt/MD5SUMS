@@ -1,0 +1,12 @@
+50eefaa82d4062aecb08a09111f64d5b  system/lib64/libnyako_core.so
+8da86b168a45c0b86fbcec32ab0f2df3  system/lib64/overlay.so
+f38c789f4cfdb3fb93860d1d8d1da53f  system/lib64/libNyako_hook_ltpofix.so
+b4eba74517c4f2134796b69f4ac64e5e  system/lib64/libNyako_hook_fcmsys.so
+ae3ded6df1ee905f1c44c2ca10f02c05  system/lib64/libNyako_hook_fcmbatt.so
+d0036036809d35551729b33a6ea2b17e  system/etc/mifod/fod-bridge.jar
+82932939b7a8fefb868971047dbdc565  vendor/bin/cos17_thermal_once
+9647e347c528336726e0b8216aa8daf3  vendor/bin/cos17_dexopt_once
+352ec60f7feaf1dd51fb23b6ce14de90  vendor/bin/cos17_memkiller_ctl
+07b7169db38a8004027aae229bc67da8  vendor/bin/hdrpeakd
+480961818ec370490f3689a8158e3083  vendor/bin/hw/xmvibproxy
+542f5c1057231d56f5c3cc666d3e62f2  vendor/bin/xtouch_tune
